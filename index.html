@@ -1,0 +1,1164 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>수도권대기환경청 AI기반 우선관리 산업단지 분석시스템</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = { darkMode:'media', theme:{ extend:{ colors:{
+      'brand-blue':'#0D47A1','brand-lightblue':'#1976D2','brand-gray':'#F5F7FA',
+      'brand-darkgray':'#4A5568','danger':'#D32F2F','warning':'#FBC02D','info':'#0288D1' }}}};
+  </script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <style>
+    body{font-family:system-ui,-apple-system,"Segoe UI","Malgun Gothic",sans-serif;}
+    .fade-in{animation:fi .25s ease}@keyframes fi{from{opacity:0}to{opacity:1}}
+    .leaflet-container{border-radius:.5rem}
+  </style>
+</head>
+<body class="bg-brand-gray text-brand-darkgray">
+<div id="app"></div>
+<script>
+const CONFIG = {
+  "appName": "수도권대기환경청 AI기반 우선관리 산업단지 분석시스템",
+  "version": "3.0.0",
+  "parsingRules": {
+    "station_name_row_index": 1,
+    "summary_rows_map": { "평균": "full_period_avg", "최대": "full_period_max", "최소": "full_period_min" },
+    "data_start_identifier": "20",
+    "value_column_step": 2,
+    "station_name_clean_pattern": "\\n|\\(\\d+\\)"
+  },
+  "industrialComplexes": [
+    { "name": "서울마곡 일반산업단지", "address": "서울특별시 강서구 마곡중앙10로 70 (마곡동)", "lat": 37.5630108, "lon": 126.8349987 },
+    { "name": "서울디지털 국가산업단지", "address": "서울특별시 구로구 디지털로32길 29 (구로동)", "lat": 37.4847168, "lon": 126.8973068 },
+    { "name": "서울온수 일반산업단지", "address": "서울특별시 구로구 부일로815번길 24 (온수동)", "lat": 37.4922706, "lon": 126.8168233 },
+    { "name": "강화 일반산업단지", "address": "인천광역시 강화군 강화읍 강화산단로 19 (옥림리)", "lat": 37.76405, "lon": 126.4980607 },
+    { "name": "강화하점 일반산업단지", "address": "인천광역시 강화군 하점면 강화대로 1246 (부근리)", "lat": 37.7745783, "lon": 126.4219572 },
+    { "name": "서운 일반산업단지", "address": "인천광역시 계양구 서운산단로 2길 6 (서운동)", "lat": 37.5320553, "lon": 126.7567334 },
+    { "name": "남동국가산업단지", "address": "인천광역시 남동구 남동서로 238 (논현동)", "lat": 37.4080006, "lon": 126.6926677 },
+    { "name": "인천일반산업단지", "address": "인천광역시 미추홀구 염전로 107 (도화동)", "lat": 37.4811231, "lon": 126.6557815 },
+    { "name": "인천기계 산업단지", "address": "인천광역시 미추홀구 염전로 330 (주안동)", "lat": 37.4702412, "lon": 126.6768552 },
+    { "name": "주안국가산업단지", "address": "인천광역시 부평구 주안5공단로 8 (가좌동)", "lat": 37.4997865, "lon": 126.6855216 },
+    { "name": "부평국가산업단지", "address": "인천광역시 부평구 부평대로 301 (청천동)", "lat": 37.5187798, "lon": 126.720764 },
+    { "name": "청라1지구일반산업단지", "address": "인천광역시 서구 청라동 205-1", "lat": 37.522881, "lon": 126.6518936 },
+    { "name": "IHP 도시첨단 산업단지", "address": "인천광역시 서구 청라동 204-4", "lat": 37.5233283, "lon": 126.6576255 },
+    { "name": "서부자원순환특화산업단지", "address": "인천광역시 서구 거월로 61 (오류동)", "lat": 37.6037245, "lon": 126.6479796 },
+    { "name": "검단일반산업단지", "address": "인천광역시 서구 검단로 54 (오류동)", "lat": 37.6027641, "lon": 126.6484426 },
+    { "name": "아이푸드파크 산업단지", "address": "인천광역시 서구 금곡동 720-6", "lat": 37.6115777, "lon": 126.6430582 },
+    { "name": "서부일반산업단지", "address": "인천광역시 서구 사렴로 48", "lat": 37.553177, "lon": 126.639202 },
+    { "name": "송도지식정보 산업단지", "address": "인천광역시 연수구 갯벌로 12 (송도동)", "lat": 37.3823803, "lon": 126.6546887 },
+    { "name": "군포 군포첨단 일반산업단지", "address": "경기도 군포시 부곡동 1246", "lat": 37.3266511, "lon": 126.9410008 },
+    { "name": "김포학운3일반산업단지", "address": "경기도 김포시 양촌읍 학운리 2977", "lat": 37.6157306, "lon": 126.6191456 },
+    { "name": "김포양촌일반산업단지", "address": "경기도 김포시 양촌읍 황금로 117 (학운리)", "lat": 37.6170463, "lon": 126.621115 },
+    { "name": "김포 학운6 일반산업단지", "address": "경기도 김포시 양촌읍 학운리 3577", "lat": 37.609644, "lon": 126.6171701 },
+    { "name": "김포 학운4-1 일반산업단지", "address": "경기도 김포시 양촌읍 학운리 3326", "lat": 37.6026022, "lon": 126.5877962 },
+    { "name": "김포학운4일반산업단지", "address": "경기도 김포시 양촌읍 학운리 3237", "lat": 37.6059081, "lon": 126.5922805 },
+    { "name": "김포학운1일반산업단지", "address": "경기도 김포시 양촌읍 황금3로 7 (학운리)", "lat": 37.6116489, "lon": 126.6153277 },
+    { "name": "김포학운2일반산업단지", "address": "경기도 김포시 양촌읍 황금로127번길 16 (학운리)", "lat": 37.6120263, "lon": 126.6219833 },
+    { "name": "김포 통진(팬택) 일반산업단지", "address": "경기도 김포시 통진읍 옹정리 16-1", "lat": 37.7009802, "lon": 126.5762832 },
+    { "name": "김포 율생 일반산업단지", "address": "경기도 김포시 대곶면 율생리 844", "lat": 37.6469098, "lon": 126.5781848 },
+    { "name": "김포 김포항공 일반산업단지", "address": "경기도 김포시 대곶면 대벽리 943", "lat": 37.6051523, "lon": 126.572085 },
+    { "name": "김포 대포 일반산업단지", "address": "경기도 김포시 양촌읍 대포리 38-4", "lat": 37.6210119, "lon": 126.6343657 },
+    { "name": "김포상마일반산업단지", "address": "경기도 김포시 통진읍 귀전리 557", "lat": 37.7137987, "lon": 126.6108752 },
+    { "name": "부천 오정 일반산업단지", "address": "경기도 부천시 오정구 산업로7번길 50 (오정동)", "lat": 37.5304628, "lon": 126.7791602 },
+    { "name": "수원 수원(2단지) 일반산업단지", "address": "경기도 수원시 권선구 산업로156번길 142-10 (고색동)", "lat": 37.23845, "lon": 126.986413 },
+    { "name": "수원 수원(1단지) 일반산업단지", "address": "경기도 수원시 권선구 산업로 180 (고색동)", "lat": 37.2424331, "lon": 126.9841744 },
+    { "name": "수원 수원(3단지) 일반산업단지", "address": "경기도 수원시 권선구 산업로 135 (고색동)", "lat": 37.2401176, "lon": 126.9791327 },
+    { "name": "시흥 시화MTV 국가산업단지", "address": "경기도 시흥시 시화벤처로 152", "lat": 37.321999, "lon": 126.704176 },
+    { "name": "시흥시화국가산업단지", "address": "경기도 시흥시 희망공원로 26 (정왕동)", "lat": 37.335999, "lon": 126.7172825 },
+    { "name": "시흥 매화 일반산업단지", "address": "경기도 시흥시 매화산단1로 36 (매화동)", "lat": 37.4196375, "lon": 126.8168551 },
+    { "name": "안산반월국가산업단지", "address": "경기도 안산시 단원구 산단로19번길 16 (원시동)", "lat": 37.3014652, "lon": 126.7718396 },
+    { "name": "안산반월도금일반산업단지", "address": "경기도 안산시 상록구 도금단지2길 30", "lat": 37.289516, "lon": 126.886397 },
+    { "name": "안양 평촌스마트스퀘어 도시첨단 산업단지", "address": "경기도 안양시 동안구 시민대로327번길 11-41 (관양동)", "lat": 37.3982113, "lon": 126.9631627 },
+    { "name": "오산 가장1 일반산업단지", "address": "경기도 오산시 가장산업동로 16-10 (가장동)", "lat": 37.1629721, "lon": 127.0410398 },
+    { "name": "오산 가장2 일반산업단지", "address": "경기도 오산시 가장산업서로 11-41 (가장동)", "lat": 37.1615902, "lon": 127.0339516 },
+    { "name": "오산 세마 일반산업단지", "address": "경기도 오산시 지곶중앙로 1-20", "lat": 37.179934, "lon": 127.032465 },
+    { "name": "의왕 의왕테크노파크 일반산업단지", "address": "경기도 의왕시 이동 705", "lat": 37.3398207, "lon": 126.9517152 },
+    { "name": "평택 고덕국제화계획지구 일반산업단지", "address": "경기도 평택시 삼성로 90", "lat": 37.03499, "lon": 127.059756 },
+    { "name": "평택 장당 일반산업단지", "address": "경기도 평택시 경기대로 1051", "lat": 37.040996, "lon": 127.06423 },
+    { "name": "평택일반산업단지", "address": "경기도 평택시 세교산단로 77 (세교동)", "lat": 37.0120305, "lon": 127.0817177 },
+    { "name": "평택 칠괴 일반산업단지", "address": "경기 평택시 산단로 255", "lat": 37.03349, "lon": 127.091045 },
+    { "name": "평택드림테크일반산업단지", "address": "경기도 평택시 청북읍 율북리 103-6", "lat": 37.0632259, "lon": 126.9688478 },
+    { "name": "평택 현곡 일반산업단지", "address": "경기 평택시 청북읍 현곡산단로93번길 6", "lat": 37.036024, "lon": 126.945014 },
+    { "name": "평택 고렴 일반산업단지", "address": "경기 평택시 청북읍 서해로 1840-23", "lat": 37.053023, "lon": 126.932563 },
+    { "name": "평택 오성 일반산업단지", "address": "경기도 평택시 오성면 오성산단1로 52", "lat": 37.025307, "lon": 126.952367 },
+    { "name": "평택 어연‧한산 일반산업단지", "address": "경기도 평택시 청북면 청북산단로 31", "lat": 37.051737, "lon": 126.972587 },
+    { "name": "평택 추팔 일반산업단지", "address": "경기도 평택시 팽성읍 추팔산단1길 135 (추팔리)", "lat": 36.9573667, "lon": 127.0774145 },
+    { "name": "평택 LG디지털파크 일반산업단지", "address": "경기도 평택시 진위면 엘지로 222 (청호리)", "lat": 37.1235449, "lon": 127.0886095 },
+    { "name": "평택포승국가산업단지", "address": "경기도 평택시 포승읍 도곡리 1122-2", "lat": 36.979656, "lon": 126.848245 },
+    { "name": "평택 포승2 일반산업단지", "address": "경기도 평택시 포승읍 포승산단로 116 (만호리)", "lat": 36.9663222, "lon": 126.8567295 },
+    { "name": "평택송탄일반산업단지", "address": "경기도 평택시 산단로 64 (모곡동)", "lat": 37.0354022, "lon": 127.0851258 },
+    { "name": "평택 진위3 일반산업단지", "address": "경기 평택시 진위면 마산리 59", "lat": 37.08652, "lon": 127.103557 },
+    { "name": "평택 진위2 일반산업단지", "address": "경기 평택시 진위면 진위2산단로 111", "lat": 37.119985, "lon": 127.07709 },
+    { "name": "평택 진위 일반산업단지", "address": "경기 평택시 진위면 진위산단로 53-12", "lat": 37.124206, "lon": 127.081707 },
+    { "name": "화성주곡산업단지", "address": "경기 화성시 우정읍 버들로 899-145", "lat": 37.118747, "lon": 126.81308 },
+    { "name": "화성 화성 일반산업단지", "address": "경기 화성시 삼성전자로 1", "lat": 37.219642, "lon": 127.066246 },
+    { "name": "화성 마도 일반산업단지", "address": "경기도 화성시 마도면 마도공단로 1길 23 (쌍송리)", "lat": 37.1801496, "lon": 126.7894863 },
+    { "name": "화성바이오밸리", "address": "경기도 화성시 마도면 청원리 1439", "lat": 37.171158, "lon": 126.767505 },
+    { "name": "화성 송산테크노파크 일반산업단지", "address": "경기도 화성시 송산면 중송리 575-1", "lat": 37.217632, "lon": 126.696456 },
+    { "name": "화성 정남 일반산업단지", "address": "경기도 화성시 정남면 정남산단로 59 (음양리)", "lat": 37.1460537, "lon": 127.0252292 },
+    { "name": "화성전곡해양일반산업단지", "address": "경기도 화성시 서신면 전곡리 1107-9", "lat": 37.187085, "lon": 126.672873 },
+    { "name": "화성 향남 일반산업단지", "address": "경기도 화성시 향남읍 제약공단2길 46", "lat": 37.093058, "lon": 126.90613 },
+    { "name": "화성 동탄 도시첨단 상업단지", "address": "경기도 화성시 동탄기흥로 602 (영천동)", "lat": 37.2142872, "lon": 127.0948477 },
+    { "name": "화성발안일반산업단지", "address": "경기도 화성시 향남읍 발안공단로 92-23 (구문천리)", "lat": 37.0870036, "lon": 126.9072222 },
+    { "name": "화성 한강씨엠 일반산업단지", "address": "경기도 화성시 만년로969번길 17", "lat": 37.19756, "lon": 127.002727 },
+    { "name": "화성(우정) 국가산업단지", "address": "경기 화성시 우정읍 기아자동차로 95", "lat": 37.038895, "lon": 126.756995 },
+    { "name": "화성 동탄 일반산업단지", "address": "경기도 화성시 동탄산단2길 23 (방교동)", "lat": 37.1630033, "lon": 127.0872143 },
+    { "name": "화성화남일반산업단지", "address": "경기도 화성시 서신면 송교리 42-24", "lat": 37.161094, "lon": 126.669899 },
+    { "name": "화성 팔탄(한미약품) 일반산업단지", "address": "경기도 화성시 팔탄면 무하로 214 (하저리)", "lat": 37.1802124, "lon": 126.8632401 },
+    { "name": "화성 동진 일반산업단지", "address": "경기 화성시 양감면 작은돌래길 35", "lat": 37.074044, "lon": 126.909727 },
+    { "name": "화성영진바이오산업단지", "address": "경기 화성시 남양읍 무하로 66", "lat": 37.180305, "lon": 126.851091 },
+    { "name": "화성장안첨단1산업단지", "address": "경기도 화성시 장안면 장안공단1길 37", "lat": 37.113032, "lon": 126.839409 },
+    { "name": "화성 장안첨단(2) 일반산업단지", "address": "경기도 화성시 3길 16 장안면 장안공단2길", "lat": 37.105693, "lon": 126.844894 }
+  ],
+  "stationCoordinates": {
+    "서울 강남구": { "lat": 37.5175421, "lon": 127.0479641, "address": "강남구 학동로 426 (강남구청 별관1동)" },
+    "서울 강동구": { "lat": 37.5449847, "lon": 127.136788, "address": "강동구 구천면로 42길 59 (천호1동 주민센터)" },
+    "서울 강북구": { "lat": 37.6478866, "lon": 127.0118806, "address": "강북구 삼양로139길 49 (우이동 주민센터)" },
+    "서울 강서구": { "lat": 37.5446703, "lon": 126.8351964, "address": "강서구 강서로 45다길 71 (화곡3동 푸른들청소년도서관)" },
+    "서울 관악구": { "lat": 37.4873547, "lon": 126.927102, "address": "관악구 신림동길 14 (신림동 주민센터)" },
+    "서울 광진구": { "lat": 37.5442119, "lon": 127.0930084, "address": "광진구 광나루로 571 (구의아리수정수센터 내)" },
+    "서울 구로구": { "lat": 37.4982638, "lon": 126.8901189, "address": "구로구 가마산로 27길 45 (구로고등학교)" },
+    "서울 금천구": { "lat": 37.443285, "lon": 126.9051344, "address": "금천구 시흥대로 34길 9 (금천구립 새싹어린이집 옥상)" },
+    "서울 노원구": { "lat": 37.6587743, "lon": 127.0685054, "address": "노원구 상계로 23길 17 (원터행복발전소)" },
+    "서울 도봉구": { "lat": 37.6541361, "lon": 127.0289898, "address": "도봉구 시루봉로 2길 34 (쌍문동 청소년문화의집)" },
+    "서울 동대문구": { "lat": 37.5759108, "lon": 127.0289656, "address": "동대문구 천호대로 13길 43 (서울용두초등학교)" },
+    "서울 동작구": { "lat": 37.4809275, "lon": 126.9715979, "address": "동작구 사당로 16아길 6 (사당4동 주민센터)" },
+    "서울 마포구": { "lat": 37.5555904, "lon": 126.9055602, "address": "마포구 포은로6길 10 (망원1동주민센터)" },
+    "서울 서대문구": { "lat": 37.5937254, "lon": 126.9497493, "address": "서대문구 세검정로4길 32 (홍제3동 주민센터)" },
+    "서울 서초구": { "lat": 37.504543, "lon": 126.994497, "address": "서초구 신반포로 15길 16 (반포2동 주민센터)" },
+    "서울 성동구": { "lat": 37.5420391, "lon": 127.0496855, "address": "성동구 뚝섬로3길 18 (성수1가1동 주민센터)" },
+    "서울 성북구": { "lat": 37.6067725, "lon": 127.0273571, "address": "성북구 삼양로 2길 70 (길음2동 주민센터)" },
+    "서울 송파구": { "lat": 37.5026836, "lon": 127.0925157, "address": "송파구 백제고분로 236 (삼전동 주민센터)" },
+    "서울 양천구": { "lat": 37.5259743, "lon": 126.8566371, "address": "양천구 중앙로 52길 56 (신정4동 문화센터)" },
+    "서울 영등포구": { "lat": 37.5259272, "lon": 126.8963398, "address": "영등포구 당산로 123 (우리은행 영등포구청지점)" },
+    "서울 용산구": { "lat": 37.5400327, "lon": 127.00485, "address": "용산구 한남대로 136 (서울특별시 중부기술교육원)" },
+    "서울 은평구": { "lat": 37.6105116, "lon": 126.9335172, "address": "서울 은평구 진흥로 215 (한국환경산업기술원)" },
+    "서울 종로구": { "lat": 37.5720164, "lon": 127.0050075, "address": "종로구 종로35가길 19 (종로5.6가동 주민센터)" },
+    "서울 중구": { "lat": 37.5643082, "lon": 126.9744408, "address": "중구 덕수궁길 15 (시청 서소문별관 3동)" },
+    "서울 중랑구": { "lat": 37.5849006, "lon": 127.0940345, "address": "중랑구 용마산로 369 (건강가정지원센터)" },
+    "인천 강화군 송해": { "lat": 37.765448, "lon": 126.4626699, "address": "강화군 송해면 전망대로 29 (송해면사무소 옥상)" },
+    "인천 강화군 길상": { "lat": 37.6415812, "lon": 126.4913094, "address": "강화군 길상면 강화동로 15- 1 (길상면보건지소 옥상)" },
+    "인천 계양구 계산": { "lat": 37.5459641, "lon": 126.7301965, "address": "계양구 계양산로134번길 18 (계양도서관 옥상)" },
+    "인천 계양구 효성": { "lat": 37.5292553, "lon": 126.715107, "address": "계양구 봉오대로600번길 14 (효성도서관)" },
+    "인천 남동구 구월동": { "lat": 37.4496001, "lon": 126.7240809, "address": "남동구 구월말로 7 (구월4동 행정복지센터 옥상)" },
+    "인천 남동구 고잔": { "lat": 37.4093318, "lon": 126.6996167, "address": "남동구 은봉로 82 (인천지방중소벤처기업청 옥상)" },
+    "인천 남동구 논현": { "lat": 37.4039849, "lon": 126.7272876, "address": "남동구 논현 청능대로 611번길 54 (근린공원 내)" },
+    "인천 남동구 서창": { "lat": 37.4274542, "lon": 126.7459827, "address": "남동구 서창동 681 (서창어울근린공원)" },
+    "인천 동구 송림": { "lat": 37.473818, "lon": 126.6431993, "address": "동구 금곡로 67 (동구의회 옥상)" },
+    "인천 미추홀구 숭의": { "lat": 37.4597088, "lon": 126.6576149, "address": "미추홀구 독정안길26 (용정초등학교 옥상)" },
+    "인천 미추홀구 주안": { "lat": 37.4554851, "lon": 126.6927471, "address": "미추홀구 구월남로 27 (주안도서관 옥상)" },
+    "인천 부평구 부평": { "lat": 37.4996601, "lon": 126.72374, "address": "부평구 부평대로 88번길 19 (부평동초등학교 옥상)" },
+    "인천 부평구 삼산": { "lat": 37.5131204, "lon": 126.7362724, "address": "부평구 삼산동 443-1 (시냇물공원 화장실 옥상)" },
+    "인천 서구 연희": { "lat": 37.5415919, "lon": 126.6812074, "address": "서구 심곡로 98 (인재개발원 옥상)" },
+    "인천 서구 검단": { "lat": 37.6021262, "lon": 126.661262, "address": "서구 검단로 502번길 15 (검단 출장소 옥상)" },
+    "인천 서구 석남": { "lat": 37.5026206, "lon": 126.6746121, "address": "서구 거북로 116 (석남2동 주민센터 옥상)" },
+    "인천 서구 원당": { "lat": 37.5944876, "lon": 126.6985611, "address": "서구 고산후로 121번길 7 (검단선사박물관 옥상)" },
+    "인천 서구 청라": { "lat": 37.5330029, "lon": 126.6344515, "address": "서구 크리스탈로 131 (수질정화시설관리동 옥상)" },
+    "인천 연수구 동춘": { "lat": 37.4094931, "lon": 126.6783087, "address": "연수구 원인재로 115 (연수구의회 옥상)" },
+    "인천 연수구 송도": { "lat": 37.3823803, "lon": 126.6546887, "address": "연수구 갯벌로 12 (테크노파크 옥상)" },
+    "인천 연수구 아암": { "lat": 37.4064278, "lon": 126.6338237, "address": "연수구 센트럴로 350 (송도달빛축제공원)" },
+    "인천 옹진군 영흥": { "lat": 37.2559865, "lon": 126.4837862, "address": "옹진군 영흥면 영흥로251번길 90" },
+    "인천 중구 신흥": { "lat": 37.4680094, "lon": 126.6350719, "address": "중구 서해대로 471 (보건환경연구원 옥상)" },
+    "인천 중구 운서": { "lat": 37.4955904, "lon": 126.4887138, "address": "중구 영종대로 85 (영종도서관 옥상)" },
+    "인천 중구 영종": { "lat": 37.4946729, "lon": 126.5637646, "address": "중구 하늘중앙로 132 (영종하늘도서관 옥상)" },
+    "경기 과천시 별양동": { "lat": 37.4237197, "lon": 126.9945958, "address": "과천시 코오롱로 53 문원초등학교 옥상" },
+    "경기 과천시 과천동": { "lat": 37.4487718, "lon": 127.0012761, "address": "과천시 상하벌로 17 환경사업소 분뇨처리동 2층" },
+    "경기 광명시 철산동": { "lat": 37.4785138, "lon": 126.8646843, "address": "광명시 시청로 20 (광명시청 제1별관 옥상)" },
+    "경기 광명시 소하동": { "lat": 37.4521036, "lon": 126.8795517, "address": "광명시 소하1로 7 (소하도서관)" },
+    "경기 구리시 교문동": { "lat": 37.5942844, "lon": 127.1297424, "address": "구리시 아차산로 439 구리시청 옥상" },
+    "경기 구리시 동구동": { "lat": 37.6183886, "lon": 127.1383948, "address": "구리시 동구릉로 217-14 동구어린이집 옥상" },
+    "경기 군포시 당동": { "lat": 37.3537332, "lon": 126.9452031, "address": "군포시 산본로197번길 36 당동도서관" },
+    "경기 군포시 산본동": { "lat": 37.3614957, "lon": 126.9349558, "address": "군포시 청백리길 6 군포시여성회관 옥상" },
+    "경기 김포시 사우동": { "lat": 37.6193015, "lon": 126.7167158, "address": "김포시 돌문로 51 사우동 주민센터" },
+    "경기 김포시 고촌읍": { "lat": 37.6066317, "lon": 126.7628717, "address": "김포시 고촌읍 신곡로 152 김포상하수도사업소" },
+    "경기 김포시 월곶면": { "lat": 37.7151284, "lon": 126.5529361, "address": "김포시 월곶면 군하로 263 월곶면 주민자치센터 옥상" },
+    "경기 김포시 (이전) 통진읍": { "lat": 37.6917349, "lon": 126.597281, "address": "김포시 통진읍 김포대로 2250번길 24-11 (구)통진읍사무소" },
+    "경기 김포시 한강신도시": { "lat": 37.6532388, "lon": 126.6292981, "address": "김포시 양촌읍 양곡2로 30번길 46 (김포독립운동기념관 옥상)" },
+    "경기 부천시 소사본동": { "lat": 37.4802303, "lon": 126.7999074, "address": "부천시 경인옛로 73 (소사어울마당)" },
+    "경기 부천시 내동": { "lat": 37.5204373, "lon": 126.7735237, "address": "부천시 삼작로 109 신흥동 주민자치센터 옥상" },
+    "경기 부천시 중2동": { "lat": 37.4939274, "lon": 126.7700946, "address": "부천시 심중로 121 책마루 도서관 옥상" },
+    "경기 부천시 오정동": { "lat": 37.527703, "lon": 126.7965717, "address": "부천시 성오로 172 (오정아트홀)" },
+    "경기 성남시 단대동": { "lat": 37.4494152, "lon": 127.155502, "address": "성남시 수정구 희망로506번길 21 (단대동 주민센터 옥상)" },
+    "경기 성남시 정자동": { "lat": 37.3614511, "lon": 127.1114345, "address": "성남시 분당구 황새울로18번길 14 (정자동 주민센터 옥상)" },
+    "경기 성남시 수내동": { "lat": 37.3826243, "lon": 127.1188797, "address": "성남시 분당구 분당로 50 (분당구청 옥상)" },
+    "경기 성남시 복정동": { "lat": 37.4563561, "lon": 127.1308461, "address": "성남시 수정구 성남대로 1416번길 22 (상수도사업소)" },
+    "경기 성남시 운중동": { "lat": 37.3905799, "lon": 127.0777437, "address": "성남시 분당구 운중로 138번길 10 (운중동 주민센터 옥상)" },
+    "경기 성남시 상대원동": { "lat": 37.4332767, "lon": 127.1643718, "address": "성남시 중원구 둔촌대로 425 (상대원1동 주민센터 옥상)" },
+    "경기 수원시 신풍동": { "lat": 37.2839421, "lon": 127.0105543, "address": "수원시 팔달구 신풍로 23번길 68 (선경도서관)" },
+    "경기 수원시 인계동": { "lat": 37.2634485, "lon": 127.0286427, "address": "수원시 팔달구 효원로 241 (수원시청)" },
+    "경기 수원시 광교동": { "lat": 37.2897876, "lon": 127.0651559, "address": "수원시 영통구 광교중앙로 216 (광교중앙공원 관리동 옥상)" },
+    "경기 수원시 영통동": { "lat": 37.2469641, "lon": 127.0563042, "address": "수원시 영통구 영통로217번길 12 (영통2동주민센터)" },
+    "경기 수원시 천천동": { "lat": 37.2863684, "lon": 126.9766478, "address": "수원시 장안구 일월천로 77 (일월도서관 옥상)" },
+    "경기 수원시 고색동": { "lat": 37.2521948, "lon": 126.9764814, "address": "수원시 권선구 서부로 1600 (차량등록사업소)" },
+    "경기 수원시 호매실": { "lat": 37.2686903, "lon": 126.9354753, "address": "수원시 권선구 칠보로 1번길 62 (보건환경연구원)" },
+    "경기 시흥시 정왕동": { "lat": 37.3467797, "lon": 126.7399989, "address": "시흥시 정왕대로233번길 19 정왕보건지소 옥상" },
+    "경기 시흥시 시화산단": { "lat": 37.3370306, "lon": 126.7241674, "address": "시흥시 공단1대로 204 (시화유통상가 27동)" },
+    "경기 시흥시 대야동": { "lat": 37.4430567, "lon": 126.7884021, "address": "시흥시 복지로 37 (다다커뮤니티센터)" },
+    "경기 시흥시 목감동": { "lat": 37.3855646, "lon": 126.8613316, "address": "시흥시 솔고개길 33 (목감공원)" },
+    "경기 시흥시 장현동": { "lat": 37.3821754, "lon": 126.8013469, "address": "시흥시 시청로 20 미래키움어린이집 옥상" },
+    "경기 시흥시 배곧동": { "lat": 37.3735088, "lon": 126.7337514, "address": "시흥시 배곧4로 102 배곧도서관 옥상" },
+    "경기 안산시 고잔동": { "lat": 37.3219461, "lon": 126.8312067, "address": "안산시 단원구 화랑로 387 (안산시청)" },
+    "경기 안산시 원시동": { "lat": 37.3052845, "lon": 126.7884811, "address": "안산시 단원구 산단로 112 (근로자복지관)" },
+    "경기 안산시 본오동": { "lat": 37.2892374, "lon": 126.8644519, "address": "안산시 상록구 오목로 7길 15 본오1동 작은도서관" },
+    "경기 안산시 원곡동": { "lat": 37.3368902, "lon": 126.7937784, "address": "안산시 단원구 부부로6길 17 근로자운동장" },
+    "경기 안산시 부곡동": { "lat": 37.33292, "lon": 126.8614715, "address": "안산시 상록구 성호로 326 부곡동 주민센터" },
+    "경기 안산시 대부동": { "lat": 37.2436784, "lon": 126.5852946, "address": "안산시 단원구 대부중앙로 97-9 대부동 주민센터" },
+    "경기 안산시 호수동": { "lat": 37.304889, "lon": 126.8335215, "address": "안산시 단원구 안산천남로 119 양지중학교" },
+    "경기 안양시 안양8동": { "lat": 37.3846616, "lon": 126.9312762, "address": "안양시 만안구 문예로36번길 16 (안양아트센터 옥상)" },
+    "경기 안양시 부림동": { "lat": 37.3943979, "lon": 126.9576675, "address": "안양시 동안구 시민대로 235 (안양시청 민원실 2층)" },
+    "경기 안양시 호계동": { "lat": 37.3675264, "lon": 126.958729, "address": "안양시 동안구 경수대로 504 (호계복합청사 옥상)" },
+    "경기 안양시 안양2동": { "lat": 37.4050151, "lon": 126.9178419, "address": "안양시 만안구 안양로 384번길 50 (안양2동 주민센터)" },
+    "경기 오산시 오산동": { "lat": 37.1591193, "lon": 127.076857, "address": "오산시 경기동로 51 고용복지플러스센터" },
+    "경기 의왕시 부곡3동": { "lat": 37.3176942, "lon": 126.9573232, "address": "의왕시 덕영대로 166 부곡동 청소년 문화의집 옥상" },
+    "경기 의왕시 고천동": { "lat": 37.3447832, "lon": 126.9683092, "address": "의왕시 시청로11 의왕시청 민원실" },
+    "경기 의정부시 의정부동": { "lat": 37.735543, "lon": 127.0407919, "address": "의정부시 범골로 138 (경기도 도로사업소 옥상)" },
+    "경기 의정부시 의정부1동": { "lat": 37.7464113, "lon": 127.047742, "address": "의정부시 가능로 152번길 14 (의정부1동 주민센터 옥상)" },
+    "경기 의정부시 송산3동": { "lat": 37.7474231, "lon": 127.1055951, "address": "의정부시 민락동 886 (푸른마당 근린공원 인근)" },
+    "경기 평택시 비전동": { "lat": 36.992329, "lon": 127.112695, "address": "평택시 경기대로 245 평택시청 옥상" },
+    "경기 평택시 안중": { "lat": 36.9857908, "lon": 126.9315195, "address": "평택시 안중읍 안현로 400 안중읍사무소 옥상" },
+    "경기 평택시 평택항": { "lat": 36.9746476, "lon": 126.8455397, "address": "평택시 포승읍 평택항로184번길 38 한국산업단지공단" },
+    "경기 평택시 송북동": { "lat": 37.0815954, "lon": 127.0602251, "address": "평택시 지산2로 113 송북동 행정복지센터 옥상" },
+    "경기 평택시 청북읍": { "lat": 37.0215834, "lon": 126.9163318, "address": "평택시 청북읍 안청로2길 60 청북문화센터 지상" },
+    "경기 평택시 고덕동": { "lat": 37.0531195, "lon": 127.0462758, "address": "평택시 고덕면 여염리 4246 종덕초등학교 옥상" },
+    "경기 하남시 신장동": { "lat": 37.5391011, "lon": 127.2146249, "address": "하남시 대청로 10 하남시청 종합민원실" },
+    "경기 하남시 미사": { "lat": 37.5670033, "lon": 127.1860254, "address": "하남시 아리수로 531 미사2동 행정복지센터 옥상" },
+    "경기 화성시 남양읍": { "lat": 37.2117634, "lon": 126.8237722, "address": "화성시 남양성지로 192-5 남양읍주민센터" },
+    "경기 화성시 향남읍": { "lat": 37.132392, "lon": 126.920321, "address": "화성시 향남읍 발안로 89 향남읍사무소 옥상" },
+    "경기 화성시 동탄동": { "lat": 37.1969248, "lon": 127.0722782, "address": "화성시 동탄반석로 87 동탄2동 주민센터 옥상" },
+    "경기 화성시 청계동": { "lat": 37.1960373, "lon": 127.1197333, "address": "화성시 동탄순환대로22길 13 (예솔초등학교 옥상)" },
+    "경기 화성시 우정읍": { "lat": 37.088712, "lon": 126.8168085, "address": "화성시 우정읍 쌍봉로 109-14(우정읍사무소 옥상)" },
+    "경기 화성시 새솔동": { "lat": 37.2812937, "lon": 126.8188167, "address": "화성시 새솔동 수노을중앙로 178 (새솔동 행정복지센터 옥상)" },
+    "경기 화성시 봉담읍": { "lat": 37.2194378, "lon": 126.9490376, "address": "화성시 봉담읍 샘마을1길 8-4 (화성시립봉담도서관 옥상)" },
+    "경기 화성시 서신면": { "lat": 37.1665511, "lon": 126.7087013, "address": "화성시 서신면 궁평항로 1702 서신면사무소 옥상" }
+  },
+  "scoringCriteria": {
+    "U1": { "threshold_low": 0, "threshold_high": 60, "max_score": 30 },
+    "U2": { "threshold_high": 20, "max_score": 15 },
+    "S1": { "threshold_low": 0, "threshold_high": 100, "max_score": 20 },
+    "S2": { "max_score": 10 },
+    "P1": { "threshold_low": 35, "threshold_high": 75, "max_score": 20 },
+    "D1": { "anomaly_threshold": 200, "penalty_anomaly": -10, "constant_run_threshold": 6, "penalty_constant": -5 },
+    "D2": { "max_score": 5, "max_distance_km": 10 }
+  },
+  "ozoneCriteria": {
+    "U1": { "description": "가장 최근 농도 × 100 (최대 20점)", "multiplier": 100, "max_score": 20 },
+    "U2": { "description": "최근 3시간 평균 농도 × 100 (최대 20점)", "multiplier": 100, "max_score": 20 },
+    "S": { "description": "기간 최고 농도 × 100 (최대 30점)", "standard_val": 1, "multiplier": 100, "max_score": 30 },
+    "P": { "description": "오존주의보(0.12ppm) 초과 시간수 × 5점 (최대 25점)", "threshold": 0.12, "per_hour": 5, "max_score": 25 },
+    "D": { "description": "측정소와의 거리 신뢰도 (기본 5점, km당 0.5점 감점)", "base_score": 5, "penalty_per_km": 0.5, "max_dist": 10 }
+  }
+};
+
+/* ====================================================================
+   접속 설정 (여기만 바꾸면 됩니다)
+   - 현재 접속코드: 1111 (아래는 그 SHA-256 해시. 코드 자체는 화면에 안 보임)
+   - 새 코드 해시: 브라우저 콘솔에서  await sha256('새코드')
+   ⚠️ 정적 HTML 로그인은 우회 가능한 접근 차단입니다(진짜 보안 아님).
+   ==================================================================== */
+const AUTH_CODE_SHA256 = '0ffe1abd1a08215353c233d6e009613e95eec4253832a761af28ff37ac5a150c';
+const SESSION_KEY = 'aqms.app.auth';
+
+/* ====================================================================
+   에어코리아(공공데이터포털) API 설정  — 일자 모드에서 사용
+   ⚠️ 인증키는 이 파일(페이지 소스)에 그대로 노출됩니다. 공공데이터 무료키라
+      치명적이진 않지만, 필요시 포털에서 재발급 가능.
+   - serviceKey : 일반 인증키(디코딩 원본). 순수 hex라 encodeURIComponent 무해.
+   - corsProxy  : data.go.kr 직접호출이 CORS로 막힐 때 우회. 필요시 교체.
+   ==================================================================== */
+const AIRKOREA = {
+  serviceKey: '22fc2cb3f16889484fe4525e397c7f90fb651bee6d21960ef484b04936d5dc8d',
+  endpoint:   'https://apis.data.go.kr/B552584/ArpltnInforInqireSvc/getMsrstnAcctoRltmMesureDnsty',
+  corsProxy:  'https://api.allorigins.win/raw?url=',   // ← 교체 가능
+  maxDays: 90,          // 에어코리아 실시간 API 제공 범위(최근 3개월)
+  concurrency: 4        // 동시 호출 제한
+};
+
+const { parsingRules, scoringCriteria, ozoneCriteria, industrialComplexes, stationCoordinates } = CONFIG;
+
+/* ---------- 에어코리아 유틸 ---------- */
+// 앱 내부 측정소 키("서울 강남구","경기 시흥시 정왕동") → API stationName(마지막 토큰)
+function apiStationName(key){
+  return key.replace(/\([^)]*\)/g,' ').trim().split(/\s+/).pop();
+}
+const parseAir=v=>{ if(v==null)return null; const s=String(v).trim();
+  if(s===''||s==='-'||s==='해당없음')return null; const n=parseFloat(s); return isNaN(n)?null:n; };
+// "YYYY-MM-DD HH:mm" (에어코리아 '24:00' → 다음날 00:00 보정)
+function normDataTime(dt){
+  const m=/^(\d{4})-(\d{2})-(\d{2})\s+(\d{1,2}):(\d{2})/.exec(String(dt||'').trim());
+  if(!m)return null;
+  const d=new Date(+m[1],+m[2]-1,+m[3],0,+m[5],0); d.setHours(d.getHours()+ +m[4]);
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+const tsToMs=ts=>{const m=/(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2})/.exec(ts);
+  return m?new Date(+m[1],+m[2]-1,+m[3],+m[4],+m[5]).getTime():NaN;};
+const fmtHM=d=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+// 기준시점-24h 구간을 커버할 dataTerm 선택
+function pickDataTerm(baseDate){
+  const winStart=baseDate.getTime()-24*3600*1000;
+  const ageMs=Date.now()-winStart, day=24*3600*1000;
+  if(ageMs<=day+2*3600*1000)return 'DAILY';
+  if(ageMs<=31*day)return 'MONTH';
+  return '3MONTH';
+}
+function extractItems(json){
+  const body=json&&json.response&&json.response.body; if(!body)return [];
+  let items=body.items; if(!items)return [];
+  if(!Array.isArray(items))items=items.item||items;
+  return Array.isArray(items)?items:[items];
+}
+// 측정소 1개 조회 (직접→실패시 프록시 폴백)
+async function fetchStationRaw(stationName,dataTerm){
+  const p=new URLSearchParams({
+    serviceKey:AIRKOREA.serviceKey, returnType:'json',
+    numOfRows:dataTerm==='DAILY'?'48':'2400', pageNo:'1',
+    stationName, dataTerm, ver:'1.3'
+  });
+  const url=AIRKOREA.endpoint+'?'+p.toString();
+  // 1차: 직접 호출
+  try{ const r=await fetch(url); if(r.ok){const j=await r.json(); if(j&&j.response)return j;} }catch(_){}
+  // 2차: CORS 프록시
+  const r2=await fetch(AIRKOREA.corsProxy+encodeURIComponent(url));
+  if(!r2.ok)throw new Error('HTTP '+r2.status);
+  return await r2.json();
+}
+// API rows → 앱 내부 측정소 객체
+function mkStation(name,timeseries){
+  return {id:0,name,fullName:name,metrics:{longest_constant_run:0},timeseries,scores:null};
+}
+const apiCache=new Map();   // baseKey|stationKey → [{ts,pm25,o3}]
+
+/* ---------- 유틸 ---------- */
+async function sha256(t){ const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(t));
+  return Array.from(new Uint8Array(b)).map(x=>x.toString(16).padStart(2,'0')).join(''); }
+const $=(s,r=document)=>r.querySelector(s);
+const $$=(s,r=document)=>Array.from(r.querySelectorAll(s));
+const el=(t,c,h)=>{const e=document.createElement(t);if(c)e.className=c;if(h!=null)e.innerHTML=h;return e;};
+const pad=n=>String(n).padStart(2,'0');
+const fmtDate=d=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+/* ---------- 파일 → CSV 텍스트 ---------- */
+function readFileAsText(file){
+  const n=file.name.toLowerCase();
+  if(n.endsWith('.xlsx')||n.endsWith('.xls')||n.endsWith('.xlsm')){
+    return new Promise((res,rej)=>{ const r=new FileReader();
+      r.onload=e=>{ try{
+        const wb=XLSX.read(new Uint8Array(e.target.result),{type:'array',cellDates:true});
+        if(!wb.SheetNames.length){rej(new Error(`'${file.name}'에 시트가 없습니다.`));return;}
+        let ws=wb.Sheets[wb.SheetNames[0]],best=0;
+        wb.SheetNames.forEach(nm=>{const s=wb.Sheets[nm],ref=s['!ref'];if(!ref)return;
+          const rg=XLSX.utils.decode_range(ref);const c=(rg.e.r-rg.s.r+1)*(rg.e.c-rg.s.c+1);if(c>best){best=c;ws=s;}});
+        // ★ PM2.5 .w(표시문자열) 깨짐 회피 → 원시값(raw)으로 CSV 생성
+        const aoa=XLSX.utils.sheet_to_json(ws,{header:1,raw:true,blankrows:true,defval:''});
+        const csv=aoa.map(row=>row.map(cell=>{
+          if(cell===null||cell===undefined||cell==='')return '';
+          if(cell instanceof Date)return fmtDate(cell);
+          let s=String(cell); if(/[",\n]/.test(s))s='"'+s.replace(/"/g,'""')+'"'; return s;
+        }).join(',')).join('\n');
+        res(csv);
+      }catch(err){rej(new Error(`'${file.name}' 엑셀 파싱 오류: ${err.message}`));} };
+      r.onerror=()=>rej(new Error(`'${file.name}' 읽기 실패`)); r.readAsArrayBuffer(file); });
+  }
+  return new Promise((res,rej)=>{ const r=new FileReader();
+    r.onload=e=>{ const buf=e.target.result; if(!buf){res('');return;}
+      const u=new Uint8Array(buf); let text='';
+      try{ text=new TextDecoder('utf-8',{fatal:true}).decode(u); }catch(_){ text=new TextDecoder('euc-kr').decode(u); }
+      res(text); };
+    r.onerror=()=>rej(new Error(`'${file.name}' 읽기 실패`)); r.readAsArrayBuffer(file); });
+}
+
+/* ---------- CSV 파싱 (원본 이식) ---------- */
+function parseCsvWithQuotes(csv){
+  const rows=[]; let cur=[],f='',q=false;
+  if(csv.charCodeAt(0)===0xFEFF)csv=csv.slice(1);
+  csv=csv.replace(/\r\n/g,'\n').replace(/\r/g,'\n');
+  for(let i=0;i<csv.length;i++){const c=csv[i];
+    if(q){if(c==='"'){if(i+1<csv.length&&csv[i+1]==='"'){f+='"';i++;}else q=false;}else f+=c;}
+    else{if(c==='"')q=true;else if(c===','){cur.push(f);f='';}else if(c==='\n'){cur.push(f);rows.push(cur);cur=[];f='';}else f+=c;}}
+  cur.push(f);rows.push(cur);
+  return rows.filter(r=>r.length>1||(r.length===1&&r[0].trim()!==''));
+}
+function findStationCoords(name){
+  if(stationCoordinates[name])return stationCoordinates[name];
+  const norm=name.replace(/\s/g,'');
+  const k=Object.keys(stationCoordinates).find(key=>key.replace(/\s/g,'')===norm);
+  if(k)return stationCoordinates[k];
+  if(name.length>1){const sk=Object.keys(stationCoordinates).find(key=>key.includes(name));if(sk)return stationCoordinates[sk];}
+  return null;
+}
+function parseCsv(csvContent, pollutant){
+  const rows=parseCsvWithQuotes(csvContent);
+  if(rows.length<2)return [];
+  const isDateStr=str=>{if(!str)return false;const s=str.trim().replace(/^['"]|['"]$/g,'');
+    return /^20\d{2}/.test(s)||/^\d{2}[-.\/년]/.test(s)||/^\d{4,5}$/.test(s);};
+  let dataStart=-1;
+  for(let i=0;i<rows.length;i++){const fc=rows[i][0]||'';if(isDateStr(fc)){dataStart=i;break;}}
+  if(dataStart<=0)dataStart=parsingRules.station_name_row_index+1;
+  let nameRowIndex=0,localMax=0;
+  for(let i=0;i<dataStart;i++){if(!rows[i])continue;const n=rows[i].filter(c=>c&&c.trim()!=='').length;if(n>localMax){localMax=n;nameRowIndex=i;}}
+  const nameRaw=rows[nameRowIndex]||[];
+  let colStep=parsingRules.value_column_step||1;
+  if(nameRaw.length>2){let step=1;const first=(nameRaw[1]||'').trim();
+    if(first!==''){for(let k=2;k<nameRaw.length;k++){const cn=(nameRaw[k]||'').trim().toUpperCase();
+      if(cn!==''&&cn!=='FLAG'&&cn!=='선별기호'&&cn!=='상태'&&!/PM\s*(10|2\.5)|O3/i.test(cn)){step=k-1;break;}}colStep=step;}
+    else{const c2=(nameRaw[2]||'').trim();if(c2===''||c2==='선별기호'||c2==='상태')colStep=2;}}
+  const stationArr=[]; const valueOffset=0;
+  for(let i=1;i<nameRaw.length;i+=colStep){const rn=nameRaw[i];
+    if(rn&&rn.trim()){const clean=rn.replace(/\n/g,' ').replace(/\([^)]+\)/g,'').trim().replace(/\s+/g,' ');
+      if(clean&&clean!=='날짜'&&clean!=='측정일시'&&clean!=='구분'){
+        stationArr.push({colIndex:i,station:{id:stationArr.length,name:clean,fullName:rn.trim().replace(/\n/g,' '),metrics:{longest_constant_run:0},timeseries:[],scores:null}});}}}
+  const map=new Map();
+  if(stationArr.length>0){
+    for(let r=dataStart;r<rows.length;r++){const cols=rows[r];if(!cols||cols.length<2)continue;
+      const rh=cols[0].trim();
+      if(isDateStr(rh)||/^\d+$/.test(rh)){const ts=rh;
+        for(let i=0;i<stationArr.length;i++){const vi=stationArr[i].colIndex+valueOffset;
+          if(cols.length>vi){const vs=cols[vi]?cols[vi].trim():'';const pv=parseFloat(vs);
+            stationArr[i].station.timeseries.push({timestamp:ts,value:!isNaN(pv)?pv:null});}}}
+      else if(parsingRules.summary_rows_map[rh]){const mk=parsingRules.summary_rows_map[rh];
+        for(let i=0;i<stationArr.length;i++){const vi=stationArr[i].colIndex+valueOffset;
+          if(cols.length>vi){const vs=cols[vi]?cols[vi].trim():'';const pv=parseFloat(vs);
+            stationArr[i].station.metrics[mk]=(!isNaN(pv)&&pv>0)?pv:0;}}}}
+    stationArr.forEach(it=>map.set(it.station.name,it.station));
+  }
+  return Array.from(map.values());
+}
+
+/* ---------- 채점 (원본 이식) ---------- */
+/* ---------- 데이터 간격 자동 감지 (5분/1시간 등 혼용 대응) ---------- */
+function parseTs(ts){ if(ts==null)return NaN;
+  const s=String(ts).trim().replace(/\./g,'-');
+  let t=new Date(s.replace(' ','T')).getTime(); if(!isNaN(t))return t;
+  t=new Date(s).getTime(); if(!isNaN(t))return t;
+  const m=/(\d{4})-(\d{1,2})-(\d{1,2})[ T]+(\d{1,2}):(\d{2})/.exec(s);
+  return m?new Date(+m[1],+m[2]-1,+m[3],+m[4],+m[5]).getTime():NaN;
+}
+// 인접 타임스탬프 차이의 중앙값(분). 판별 불가 시 5분으로 가정.
+function detectIntervalMin(series){
+  const times=series.map(t=>parseTs(t.timestamp)).filter(x=>!isNaN(x)).sort((a,b)=>a-b);
+  if(times.length<2)return 5;
+  const diffs=[];for(let i=1;i<times.length;i++){const d=(times[i]-times[i-1])/60000;if(d>0)diffs.push(d);}
+  if(!diffs.length)return 5;
+  diffs.sort((a,b)=>a-b);
+  const med=diffs[Math.floor(diffs.length/2)];
+  return med>0?med:5;
+}
+// 특정 '분'에 해당하는 포인트 수 (최소 1)
+function ptsForMinutes(intervalMin,minutes){return Math.max(1,Math.round(minutes/intervalMin));}
+
+function preprocessOzoneData(st){
+  // ≥1.0ppm 이상치만 결측 처리. forward-fill(직전값 채움)은 데이터 왜곡이라 제거.
+  st.timeseries.forEach(p=>{if(p.value!==null&&p.value>=1.0)p.value=null;});
+}
+function formatTimestamp(ts){try{const d=new Date(ts.replace(/\./g,'-'));if(isNaN(d.getTime()))return ts;
+  return `${d.getMonth()+1}월 ${d.getDate()}일 ${d.getHours()}시 ${d.getMinutes()}분`;}catch(e){return ts;}}
+function calcMetricsPM25(st){
+  const valid=st.timeseries.filter(t=>t.value!==null&&t.value>=0);
+  if(valid.length===0){st.metrics.longest_constant_run=0;return;}
+  const iv=detectIntervalMin(valid); st.metrics.interval_min=iv;
+  const n1h=ptsForMinutes(iv,60), n2h=ptsForMinutes(iv,120);
+  if(st.metrics.full_period_max===undefined)st.metrics.full_period_max=Math.max(...valid.map(t=>t.value));
+  if(st.metrics.full_period_avg===undefined){const s=valid.reduce((a,c)=>a+c.value,0);st.metrics.full_period_avg=parseFloat((s/valid.length).toFixed(1));}
+  if(st.metrics.full_period_min===undefined)st.metrics.full_period_min=Math.min(...valid.map(t=>t.value));
+  const last1h=valid.slice(-Math.min(n1h,valid.length));const sSum=last1h.reduce((a,c)=>a+c.value,0);
+  st.metrics.latest_1hr_avg=parseFloat((sSum/last1h.length).toFixed(2));
+  if(valid.length>=2){const li=Math.max(0,valid.length-1-n2h);const v2=valid[li].value;st.metrics.c_2h_ago=v2;
+    if(st.metrics.latest_1hr_avg!==undefined&&v2!==null)st.metrics.delta_2hr=parseFloat((st.metrics.latest_1hr_avg-v2).toFixed(2));}
+  if(st.metrics.full_period_max!==undefined){const mt=[...valid].reverse().find(t=>t.value===st.metrics.full_period_max);st.metrics.max_value_timestamp=mt?mt.timestamp:null;}
+  let lr=0,cr=0,lv=-Infinity;for(const t of valid){if(t.value!==null&&t.value===lv)cr++;else{lr=Math.max(lr,cr);cr=1;lv=t.value;}}
+  st.metrics.longest_constant_run=Math.max(lr,cr);
+}
+function calcPM25Scores(st){
+  const {metrics,timeseries}=st,crit=scoringCriteria,comp={};
+  const cNow=metrics.latest_1hr_avg;let u1=0;if(cNow!==undefined)u1=Math.min(crit.U1.max_score,Math.max(0,cNow*0.5));
+  comp['최신 1시간 농도']=cNow!==undefined?`${cNow}㎍/㎥`:'N/A';
+  const dC=metrics.delta_2hr;let u2=0;if(dC!==undefined&&dC!==null)u2=Math.min(crit.U2.max_score,Math.max(0,crit.U2.max_score*dC/crit.U2.threshold_high));
+  comp['2시간 농도 변화']=(dC!==undefined&&dC!==null)?`${dC.toFixed(1)}㎍/㎥`:'N/A';
+  const cMax=metrics.full_period_max;let s1=0;if(cMax!==undefined)s1=Math.min(crit.S1.max_score,Math.max(0,cMax*0.2));
+  comp['기간 최대 농도']=cMax!==undefined?`${cMax}㎍/㎥`:'N/A';
+  let s2=0;if(metrics.max_value_timestamp&&timeseries.length>1){const tF=new Date(timeseries[0].timestamp).getTime(),tL=new Date(timeseries[timeseries.length-1].timestamp).getTime(),tM=new Date(metrics.max_value_timestamp).getTime();
+    if(tL>tF){const rt=(tM-tF)/(tL-tF);s2=crit.S2.max_score*Math.min(1,Math.max(0,rt));}}
+  comp['최대농도 최근성']=metrics.max_value_timestamp?formatTimestamp(metrics.max_value_timestamp):'N/A';
+  const cMean=metrics.full_period_avg;let p1=0;if(cMean!==undefined&&cMean>=crit.P1.threshold_low)p1=Math.min(crit.P1.max_score,Math.max(0,(cMean-crit.P1.threshold_low)*0.5));
+  comp['기간 평균 농도']=cMean!==undefined?`${cMean}㎍/㎥`:'N/A';
+  let d1=0;const runThPts=ptsForMinutes(metrics.interval_min||5,(crit.D1.constant_run_threshold||6)*60);
+  if(metrics.full_period_max&&metrics.full_period_max>=crit.D1.anomaly_threshold)d1=crit.D1.penalty_anomaly;
+  else if(metrics.longest_constant_run>=runThPts)d1=crit.D1.penalty_constant;
+  comp['이상값']=(metrics.full_period_max&&metrics.full_period_max>=crit.D1.anomaly_threshold)?metrics.full_period_max:'없음';
+  comp['장기 동일값']=metrics.longest_constant_run>=runThPts?`${metrics.longest_constant_run}회 (연속 ${crit.D1.constant_run_threshold}시간↑)`:'없음';
+  const total=u1+u2+s1+s2+p1+d1;
+  return {u1:+u1.toFixed(1),u2:+u2.toFixed(1),s1:+s1.toFixed(1),s2:+s2.toFixed(1),p1:+p1.toFixed(1),d1:+d1.toFixed(1),d2:0,total:+Math.max(0,total).toFixed(1),components:comp};
+}
+function calcOzoneScores(st){
+  const {timeseries}=st;const valid=timeseries.filter(d=>d.value!==null);const count=valid.length;
+  if(count===0)return {total:0,components:{},u:0,s:0,p:0,d:0};
+  valid.sort((a,b)=>a.timestamp.localeCompare(b.timestamp));
+  const iv=detectIntervalMin(valid); st.metrics.interval_min=iv;
+  const current=valid[valid.length-1];
+  // U2: 최근 3시간 평균 (순간 스파이크 U1과 짧은 지속 고농도 구분)
+  const n3h=ptsForMinutes(iv,180);
+  const last3=valid.slice(-Math.min(n3h,valid.length));
+  const l3=last3.reduce((a,c)=>a+(c.value||0),0)/last3.length;
+  const u1=Math.min(ozoneCriteria.U1.max_score,Math.max(0,(current.value||0)*ozoneCriteria.U1.multiplier));
+  const u2=Math.min(ozoneCriteria.U2.max_score,Math.max(0,l3*ozoneCriteria.U2.multiplier));
+  const maxVal=Math.max(...valid.map(d=>d.value||0));
+  const sS=Math.min(ozoneCriteria.S.max_score,(maxVal/ozoneCriteria.S.standard_val)*ozoneCriteria.S.multiplier);
+  // P: 주의보(0.12ppm) 초과 '시간수' × 5점 (데이터 간격 반영)
+  const exceedPts=valid.filter(d=>(d.value||0)>ozoneCriteria.P.threshold).length;
+  const exceedHours=exceedPts*iv/60;
+  const pS=Math.min(ozoneCriteria.P.max_score,exceedHours*(ozoneCriteria.P.per_hour||5));
+  st.metrics.full_period_max=maxVal;st.metrics.latest_value=current.value||0;st.metrics.latest_3hr_avg=l3;
+  st.metrics.ozone_exceed_count=exceedPts;st.metrics.ozone_exceed_hours=+exceedHours.toFixed(1);st.metrics.total_valid_count=count;
+  const comp={
+    'U1_val':`${u1.toFixed(1)}점 (최신: ${current.value}ppm)`,
+    'U2_val':`${u2.toFixed(1)}점 (3시간평균: ${l3.toFixed(3)}ppm)`,
+    'S_val':`${sS.toFixed(1)}점 (최대: ${maxVal}ppm)`,
+    'P_val':`${pS.toFixed(1)}점 (초과: ${exceedHours.toFixed(1)}시간)`,
+    '최신 농도':`${current.value}ppm`,'최대 농도':`${maxVal}ppm`
+  };
+  return {u1:+u1.toFixed(1),u2:+u2.toFixed(1),u:+(u1+u2).toFixed(1),s:+sS.toFixed(1),p:+pS.toFixed(1),d:0,d1:0,d2:0,total:+(u1+u2+sS+pS).toFixed(1),components:comp};
+}
+function haversine(la1,lo1,la2,lo2){const R=6371,dLa=(la2-la1)*Math.PI/180,dLo=(lo2-lo1)*Math.PI/180;
+  const a=Math.sin(dLa/2)**2+Math.cos(la1*Math.PI/180)*Math.cos(la2*Math.PI/180)*Math.sin(dLo/2)**2;
+  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));}
+
+function analyzeData(contents, selectedNames, pollutant){
+  const raw=contents.flatMap(c=>parseCsv(c,pollutant));
+  if(raw.length===0)throw new Error('제공된 파일에서 유효한 측정소 데이터를 찾을 수 없습니다.');
+  return analyzeStations(raw, selectedNames, pollutant);
+}
+
+// 이미 파싱된 측정소 배열(업로드 파서 결과 또는 API 변환 결과)로 분석
+function analyzeStations(raw, selectedNames, pollutant){
+  if(raw.length===0)throw new Error('유효한 측정소 데이터가 없습니다.');
+  const map=new Map();
+  raw.forEach(s=>{if(map.has(s.name))map.get(s.name).timeseries.push(...s.timeseries);else map.set(s.name,s);});
+  map.forEach(s=>s.timeseries.sort((a,b)=>a.timestamp.localeCompare(b.timestamp)));
+  const uniq=Array.from(map.values());uniq.forEach((s,i)=>s.id=i);
+  const totalValid=uniq.reduce((n,s)=>n+s.timeseries.filter(t=>t.value!==null).length,0);
+  if(totalValid===0)throw new Error(`데이터 파싱 실패: ${pollutant} 의 유효한 측정값을 찾을 수 없습니다. (파싱된 측정소 ${uniq.length}개)`);
+  const selected=industrialComplexes.filter(c=>selectedNames.includes(c.name));
+  const analyzed=[];
+  selected.forEach(complex=>{let closest=null,minD=Infinity,coord=null;
+    uniq.forEach(st=>{const sc=findStationCoords(st.name);if(sc){const d=haversine(complex.lat,complex.lon,sc.lat,sc.lon);if(d<minD){minD=d;closest=st;coord=sc;}}});
+    if(closest){
+      if(!closest.scores){ if(pollutant==='O3'){preprocessOzoneData(closest);closest.scores=calcOzoneScores(closest);}
+        else{calcMetricsPM25(closest);closest.scores=calcPM25Scores(closest);} }
+      const cp=JSON.parse(JSON.stringify(closest));
+      if(pollutant==='PM2.5'){const {max_score,max_distance_km}=scoringCriteria.D2;const prox=Math.max(0,max_score*(1-minD/max_distance_km));
+        cp.scores.d2=+prox.toFixed(1);const {u1=0,u2=0,s1=0,s2=0,p1=0,d1=0,d2=0}=cp.scores;
+        cp.scores.total=+Math.max(0,u1+u2+s1+s2+p1+d1+d2).toFixed(1);
+        cp.scores.components['근접성 점수']=`${cp.scores.d2}점 (${minD.toFixed(1)}km)`;}
+      else{let dS=Math.max(0,ozoneCriteria.D.base_score-(minD*ozoneCriteria.D.penalty_per_km));cp.scores.d=+dS.toFixed(1);
+        const {u1=0,u2=0,s=0,p=0}=cp.scores;cp.scores.total=+(u1+u2+s+p+dS).toFixed(1);
+        cp.scores.components['D_val']=`${dS.toFixed(1)}점 (${minD.toFixed(1)}km)`;}
+      analyzed.push({complex,station:cp,distanceKm:minD,stationCoord:coord});}});
+  if(analyzed.length===0){const ex=uniq.map(s=>s.name).slice(0,5).join(', ');
+    throw new Error(`선택한 산업단지와 매칭되는 측정소를 찾을 수 없습니다.\n파싱된 측정소 예: ${ex}`);}
+  const ranked=analyzed.sort((a,b)=>b.station.scores.total-a.station.scores.total);
+  const ts=uniq.flatMap(s=>s.timeseries).map(t=>t.timestamp).filter(Boolean).sort((a,b)=>a.localeCompare(b));
+  return {pollutantType:pollutant,rankedComplexes:ranked,startTimestamp:ts[0]||'N/A',endTimestamp:ts[ts.length-1]||'N/A',totalStationsParsed:uniq.length,totalComplexesAnalyzed:ranked.length};
+}
+
+/* ==================================================================== */
+/*  상태 & 렌더                                                          */
+/* ==================================================================== */
+const STATE={mode:'upload',pollutant:'PM2.5',files:[],selected:new Set(),result:null,complexSearch:'',dateBase:null,dateResult:null};
+const unit=()=>STATE.pollutant==='PM2.5'?'㎍/㎥':'ppm';
+const dec=()=>STATE.pollutant==='PM2.5'?1:3;
+const fmtV=v=>v==null||v===undefined?'-':Number(v).toFixed(dec());
+
+function render(){const app=$('#app');app.innerHTML='';
+  if(sessionStorage.getItem(SESSION_KEY)==='ok')renderMain(app);else renderLogin(app);}
+
+/* ---------- 로그인 (접속코드 단일, 마스킹, 코드 미표시) ---------- */
+function renderLogin(app){
+  const wrap=el('div','min-h-screen flex items-center justify-center px-4 fade-in');
+  wrap.innerHTML=`
+    <div class="w-full max-w-md">
+      <div class="text-center mb-8">
+        <div class="mx-auto w-14 h-14 rounded-xl bg-brand-blue flex items-center justify-center shadow-lg mb-4">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        </div>
+        <h1 class="text-xl font-bold text-brand-darkgray">수도권대기환경청</h1>
+        <p class="text-sm text-gray-500 mt-1">AI기반 우선관리 산업단지 분석시스템</p>
+      </div>
+      <form id="loginForm" class="bg-white rounded-lg shadow-xl border border-gray-200 p-8 space-y-5">
+        <div>
+          <label class="block text-sm font-medium mb-1">접속코드</label>
+          <input id="code" type="password" inputmode="numeric" autocomplete="off" autofocus placeholder="접속코드를 입력하세요"
+            class="w-full px-3 py-2.5 rounded-md border border-gray-300 text-center tracking-widest focus:outline-none focus:ring-2 focus:ring-brand-lightblue"/>
+        </div>
+        <div id="loginErr" class="hidden text-sm text-danger bg-red-50 border border-red-200 rounded-md px-3 py-2"></div>
+        <button id="loginBtn" type="submit" class="w-full px-4 py-3 rounded-md bg-brand-blue hover:bg-brand-lightblue text-white font-bold shadow-md">입장</button>
+      </form>
+      <p class="mt-4 text-center text-[11px] text-gray-400">정적 사이트용 접근 차단이며, 민감 데이터 보호에는 서버 인증이 필요합니다.</p>
+    </div>`;
+  app.appendChild(wrap);
+  let attempts=0,lockUntil=0;
+  $('#loginForm',app).addEventListener('submit',async e=>{e.preventDefault();
+    const errBox=$('#loginErr',app),btn=$('#loginBtn',app);if(Date.now()<lockUntil)return;
+    btn.disabled=true;btn.textContent='확인 중...';
+    const ok=(await sha256($('#code',app).value)).toLowerCase()===AUTH_CODE_SHA256.toLowerCase();
+    btn.disabled=false;btn.textContent='입장';
+    if(ok){sessionStorage.setItem(SESSION_KEY,'ok');render();return;}
+    attempts++;
+    if(attempts>=5){lockUntil=Date.now()+60000;attempts=0;errBox.textContent='접속코드 5회 오류. 잠시 후 다시 시도하세요.';}
+    else errBox.textContent=`접속코드가 올바르지 않습니다. (${attempts}/5)`;
+    errBox.classList.remove('hidden');$('#code',app).value='';});
+}
+
+/* ---------- 메인 ---------- */
+function renderMain(app){
+  const root=el('div','min-h-screen fade-in');
+  root.innerHTML=`
+  <header class="bg-brand-blue shadow-md">
+    <div class="container mx-auto px-4 sm:px-6 py-4 flex flex-col md:flex-row justify-between items-center gap-4">
+      <div class="text-center md:text-left">
+        <h1 class="text-base sm:text-2xl lg:text-3xl font-bold text-white tracking-tight break-keep">${esc(CONFIG.appName)}</h1>
+        <p class="text-xs sm:text-sm text-blue-200 mt-1">v${CONFIG.version}</p>
+      </div>
+      <div class="flex items-center gap-2 sm:gap-3 w-full md:w-auto justify-between md:justify-end">
+        <div class="bg-blue-800 p-1 rounded-lg flex space-x-1">
+          <button data-pol="PM2.5" class="polBtn px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-bold whitespace-nowrap"></button>
+          <button data-pol="O3" class="polBtn px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-bold whitespace-nowrap"></button>
+        </div>
+        <button id="logout" class="px-3 py-2 rounded-md text-xs sm:text-sm font-medium text-blue-100 hover:bg-blue-700 whitespace-nowrap">로그아웃</button>
+      </div>
+    </div>
+  </header>
+  <main class="container mx-auto p-4 sm:p-6 lg:p-8 space-y-6 sm:space-y-8">
+    <section class="bg-white p-4 rounded-lg shadow-lg border border-gray-200">
+      <div class="flex flex-col sm:flex-row sm:items-center gap-3">
+        <span class="text-sm font-semibold text-brand-darkgray shrink-0">데이터 입력 방식</span>
+        <div class="bg-gray-100 p-1 rounded-lg flex w-full sm:w-auto sm:inline-flex gap-1">
+          <button data-mode="upload" class="modeBtn flex-1 sm:flex-none px-3 sm:px-5 py-2 rounded-md text-xs sm:text-sm font-bold whitespace-nowrap">파일 업로드 모드</button>
+          <button data-mode="date" class="modeBtn flex-1 sm:flex-none px-3 sm:px-5 py-2 rounded-md text-xs sm:text-sm font-bold whitespace-nowrap">일자 모드 (API)</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="uploadSection" class="bg-white p-6 rounded-lg shadow-lg border border-gray-200">
+      <h2 class="text-xl lg:text-2xl font-semibold border-b pb-3 mb-4">1. 데이터 파일 업로드 (<span class="polLabel"></span>)</h2>
+      <p class="text-gray-600 mb-4">분석할 <span class="polKor"></span> 데이터가 포함된 CSV 또는 XLSX 파일을 업로드해주세요.</p>
+      <div id="drop" class="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center cursor-pointer hover:border-brand-lightblue">
+        <input id="fileInput" type="file" accept=".csv,.xlsx,.xls,.xlsm" multiple class="hidden"/>
+        <p class="text-gray-500">클릭 또는 드래그하여 파일 선택 (CSV/XLSX, 여러 개 가능)</p>
+        <p id="fileList" class="mt-3 text-sm text-brand-blue font-medium"></p>
+      </div>
+    </section>
+
+    <section id="dateSection" class="hidden bg-white p-6 rounded-lg shadow-lg border border-gray-200">
+      <h2 class="text-xl lg:text-2xl font-semibold border-b pb-3 mb-4">1. 기준 시점 선택 (에어코리아 실시간 API)</h2>
+      <p class="text-gray-600 mb-4 text-sm">파일 업로드 없이, 선택한 기준 시점으로부터 <b>과거 24시간</b>의 PM2.5·오존(O3) 데이터를 자동 수집합니다. 아래에서 산업단지를 고르면 각 단지에서 가장 가까운 측정소만 조회합니다.</p>
+      <div class="flex flex-col sm:flex-row sm:items-end gap-4">
+        <div class="flex-1">
+          <label class="block text-sm font-medium mb-1">기준 시점 (이 시각부터 24시간 이전까지 분석)</label>
+          <input id="dateBase" type="datetime-local"
+            class="w-full sm:w-auto px-3 py-2.5 rounded-md border border-gray-300 focus:outline-none focus:ring-2 focus:ring-brand-lightblue"/>
+        </div>
+        <button id="btnNow" class="px-4 py-2.5 rounded-md bg-blue-50 text-brand-blue font-medium hover:bg-blue-100 whitespace-nowrap">현재 시각으로</button>
+      </div>
+      <div id="dateProgress" class="hidden mt-4">
+        <div class="flex justify-between text-sm text-gray-600 mb-1"><span id="progLabel">측정소 조회 준비 중...</span><span id="progPct">0%</span></div>
+        <div class="w-full bg-gray-200 rounded-full h-2.5"><div id="progBar" class="bg-brand-blue h-2.5 rounded-full transition-all" style="width:0%"></div></div>
+      </div>
+      <div id="dateFailed" class="hidden mt-4 text-sm bg-yellow-50 border border-yellow-200 text-yellow-800 rounded-md px-3 py-2"></div>
+      <p class="mt-4 text-[11px] text-gray-400">에어코리아 공공데이터 API 사용 · 최근 3개월(90일) 이내 시점만 조회 가능 · 인증키는 페이지 소스에 노출됩니다.</p>
+    </section>
+
+
+    <section class="bg-white p-6 rounded-lg shadow-lg border border-gray-200">
+      <h2 class="text-xl font-semibold border-b pb-3 mb-4">2. 분석 대상 산업단지 선택</h2>
+      <p class="text-gray-600 mb-4 text-sm">우선순위를 분석할 산업단지를 선택해주세요.</p>
+      <div class="flex flex-col sm:flex-row gap-3 mb-4">
+        <input id="complexSearch" placeholder="산업단지 검색..." class="flex-1 px-4 py-2.5 rounded-md border border-gray-300 focus:outline-none focus:ring-2 focus:ring-brand-lightblue"/>
+        <div class="flex gap-2">
+          <button id="selectAll" class="px-4 py-2 rounded-md bg-blue-50 text-brand-blue font-medium hover:bg-blue-100 whitespace-nowrap">전체 선택</button>
+          <button id="clearAll" class="px-4 py-2 rounded-md bg-gray-100 text-gray-700 font-medium hover:bg-gray-200 whitespace-nowrap">전체 해제</button>
+        </div>
+      </div>
+      <div id="complexList" class="border rounded-lg p-3 max-h-72 overflow-y-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-1"></div>
+      <p class="mt-3 text-sm text-gray-500">선택된 산업단지: <b id="selCount">0</b> / ${industrialComplexes.length}</p>
+    </section>
+
+    <div class="flex flex-col sm:flex-row sm:flex-wrap justify-center items-stretch sm:items-center gap-3 sm:gap-4">
+      <button id="btnCriteria" class="w-full sm:w-auto px-6 sm:px-8 py-3 sm:py-4 text-base sm:text-lg font-bold text-brand-blue bg-white border-2 border-brand-blue rounded-lg shadow-md hover:bg-blue-50">평가 기준표 (<span class="polLabel"></span>)</button>
+      <button id="btnInfo" class="w-full sm:w-auto px-6 py-3 sm:py-4 text-base sm:text-lg font-bold text-gray-700 bg-white border-2 border-gray-300 rounded-lg shadow-md hover:bg-gray-50">데이터(산단/측정망) 정보</button>
+      <button id="btnAnalyze" class="w-full sm:w-auto px-6 sm:px-8 py-3 sm:py-4 text-base sm:text-lg font-bold text-white bg-brand-blue rounded-lg shadow-md hover:bg-brand-lightblue disabled:bg-gray-400 disabled:cursor-not-allowed" disabled></button>
+      <button id="btnReset" class="hidden w-full sm:w-auto px-6 sm:px-8 py-3 sm:py-4 text-base sm:text-lg font-bold text-white bg-green-600 rounded-lg shadow-md hover:bg-green-700">초기화 및 새 분석</button>
+    </div>
+
+    <div id="err" class="hidden bg-red-50 border border-red-200 text-danger rounded-lg px-4 py-3 text-sm whitespace-pre-line"></div>
+    <div id="results"></div>
+  </main>
+  <footer class="text-center py-6 text-sm text-gray-500">© ${new Date().getFullYear()} ${esc(CONFIG.appName)}</footer>
+  <div id="modalRoot"></div>`;
+  app.appendChild(root);
+
+  const paintPol=()=>{
+    $$('.polBtn',root).forEach(b=>{const on=b.dataset.pol===STATE.pollutant;
+      b.className='polBtn px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-bold whitespace-nowrap '+(on?'bg-white text-brand-blue shadow':'text-blue-200 hover:bg-blue-700');
+      b.textContent=b.dataset.pol==='PM2.5'?'PM2.5 분석':'오존(O3) 분석';});
+    $$('.polLabel',root).forEach(s=>s.textContent=STATE.pollutant);
+    $$('.polKor',root).forEach(s=>s.textContent=STATE.pollutant==='PM2.5'?'초미세먼지(PM2.5)':'오존(O3)');
+    $('#btnAnalyze',root).textContent=`${STATE.pollutant} 우선순위 분석 실행`;
+  };
+  paintPol();
+  $$('.polBtn',root).forEach(b=>b.addEventListener('click',()=>{
+    STATE.pollutant=b.dataset.pol; paintPol();
+    // 일자 모드: 이미 수집한 데이터가 있으면 재호출 없이 즉시 재분석
+    if(STATE.mode==='date'&&STATE.dateResult){applyDateResult();return;}
+    STATE.result=null;$('#results').innerHTML='';$('#btnReset').classList.add('hidden');$('#btnAnalyze').classList.remove('hidden');
+  }));
+  $('#logout',root).addEventListener('click',()=>{sessionStorage.removeItem(SESSION_KEY);render();});
+
+  // 모드 전환
+  const paintMode=()=>{
+    $$('.modeBtn',root).forEach(b=>{const on=b.dataset.mode===STATE.mode;
+      b.className='modeBtn flex-1 sm:flex-none px-3 sm:px-5 py-2 rounded-md text-xs sm:text-sm font-bold whitespace-nowrap '+(on?'bg-brand-blue text-white shadow':'text-gray-500 hover:bg-gray-200');});
+    $('#uploadSection',root).classList.toggle('hidden',STATE.mode!=='upload');
+    $('#dateSection',root).classList.toggle('hidden',STATE.mode!=='date');
+    updateAnalyzeBtn();
+  };
+  $$('.modeBtn',root).forEach(b=>b.addEventListener('click',()=>{
+    if(STATE.mode===b.dataset.mode)return;
+    STATE.mode=b.dataset.mode;
+    STATE.result=null;STATE.dateResult=null;
+    $('#results').innerHTML='';$('#err').classList.add('hidden');
+    $('#dateProgress').classList.add('hidden');$('#dateFailed').classList.add('hidden');
+    $('#btnReset').classList.add('hidden');$('#btnAnalyze').classList.remove('hidden');
+    paintMode();
+  }));
+
+  // 일자 모드: 기준 시점 입력
+  const dateInput=$('#dateBase',root);
+  const toLocalInput=d=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  const setNow=()=>{const n=new Date();dateInput.value=toLocalInput(n);STATE.dateBase=n;updateAnalyzeBtn();};
+  const min=new Date(Date.now()-AIRKOREA.maxDays*24*3600*1000);
+  dateInput.min=toLocalInput(min); dateInput.max=toLocalInput(new Date());
+  setNow();
+  dateInput.addEventListener('change',()=>{STATE.dateBase=dateInput.value?new Date(dateInput.value):null;updateAnalyzeBtn();});
+  $('#btnNow',root).addEventListener('click',setNow);
+
+  // 업로드
+  const input=$('#fileInput',root),drop=$('#drop',root);
+  drop.addEventListener('click',()=>input.click());
+  ['dragover','dragenter'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add('border-brand-lightblue','bg-blue-50');}));
+  ['dragleave','drop'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove('border-brand-lightblue','bg-blue-50');}));
+  drop.addEventListener('drop',e=>setFiles([...e.dataTransfer.files]));
+  input.addEventListener('change',()=>setFiles([...input.files]));
+  function setFiles(fs){STATE.files=fs;$('#fileList',root).textContent=fs.length?fs.map(f=>f.name).join(', '):'';updateAnalyzeBtn();}
+
+  // 산단 선택기
+  const listBox=$('#complexList',root);
+  function paintList(){const q=STATE.complexSearch.trim().toLowerCase();listBox.innerHTML='';
+    industrialComplexes.filter(c=>!q||c.name.toLowerCase().includes(q)).forEach(c=>{
+      const id='cx_'+industrialComplexes.indexOf(c);
+      const row=el('label','flex items-center gap-2 py-1 text-sm cursor-pointer');
+      row.innerHTML=`<input type="checkbox" ${STATE.selected.has(c.name)?'checked':''} class="rounded border-gray-300 text-brand-blue focus:ring-brand-lightblue"/> <span>${esc(c.name)}</span>`;
+      row.querySelector('input').addEventListener('change',e=>{if(e.target.checked)STATE.selected.add(c.name);else STATE.selected.delete(c.name);updateSel();});
+      listBox.appendChild(row);});}
+  function updateSel(){$('#selCount',root).textContent=STATE.selected.size;updateAnalyzeBtn();}
+  function updateAnalyzeBtn(){
+    const ok=STATE.mode==='upload'
+      ? (STATE.files.length>0&&STATE.selected.size>0)
+      : (!!STATE.dateBase&&STATE.selected.size>0);
+    $('#btnAnalyze',root).disabled=!ok;
+  }
+  $('#complexSearch',root).addEventListener('input',e=>{STATE.complexSearch=e.target.value;paintList();});
+  $('#selectAll',root).addEventListener('click',()=>{const q=STATE.complexSearch.trim().toLowerCase();industrialComplexes.filter(c=>!q||c.name.toLowerCase().includes(q)).forEach(c=>STATE.selected.add(c.name));paintList();updateSel();});
+  $('#clearAll',root).addEventListener('click',()=>{STATE.selected.clear();paintList();updateSel();});
+  paintList();updateSel();
+  paintMode();
+
+  // 버튼
+  $('#btnCriteria',root).addEventListener('click',openCriteriaModal);
+  $('#btnInfo',root).addEventListener('click',openInfoModal);
+  $('#btnReset',root).addEventListener('click',()=>{
+    STATE.result=null;STATE.dateResult=null;STATE.files=[];STATE.selected.clear();
+    $('#fileList').textContent='';$('#results').innerHTML='';
+    $('#dateProgress').classList.add('hidden');$('#dateFailed').classList.add('hidden');
+    paintList();updateSel();
+    $('#btnReset').classList.add('hidden');$('#btnAnalyze').classList.remove('hidden');
+  });
+  $('#btnAnalyze',root).addEventListener('click',()=>{ STATE.mode==='date'?runDateAnalysis():runAnalysis(); });
+}
+
+async function runAnalysis(){
+  const errBox=$('#err');errBox.classList.add('hidden');
+  const btn=$('#btnAnalyze');btn.disabled=true;btn.textContent='분석 중...';
+  try{
+    const contents=[];for(const f of STATE.files)contents.push(await readFileAsText(f));
+    STATE.result=analyzeData(contents,[...STATE.selected],STATE.pollutant);
+    renderReport();
+    $('#btnAnalyze').classList.add('hidden');$('#btnReset').classList.remove('hidden');
+    $('#results').scrollIntoView({behavior:'smooth'});
+  }catch(e){errBox.textContent=e.message;errBox.classList.remove('hidden');}
+  finally{btn.disabled=false;btn.textContent=`${STATE.pollutant} 우선순위 분석 실행`;}
+}
+
+/* ---------- 일자 모드 (에어코리아 API) ---------- */
+function setProgress(done,total){
+  const box=$('#dateProgress');if(!box)return;box.classList.remove('hidden');
+  const pct=total?Math.round(done/total*100):0;
+  $('#progBar').style.width=pct+'%';$('#progPct').textContent=pct+'%';
+  $('#progLabel').textContent=done<total?`측정소 ${done}/${total} 조회 중...`:`측정소 ${total}개 조회 완료`;
+}
+
+async function runDateAnalysis(){
+  const errBox=$('#err');errBox.classList.add('hidden');
+  $('#dateFailed').classList.add('hidden');
+  const btn=$('#btnAnalyze');
+  try{
+    const base=STATE.dateBase;
+    if(!base||isNaN(base.getTime()))throw new Error('기준 시점을 선택해주세요.');
+    const now=new Date();
+    if(base.getTime()>now.getTime()+60000)throw new Error('기준 시점은 현재 시각보다 미래일 수 없습니다.');
+    if(now.getTime()-base.getTime()>AIRKOREA.maxDays*24*3600*1000)
+      throw new Error(`에어코리아 실시간 API는 최근 ${AIRKOREA.maxDays}일 이내만 조회 가능합니다. 더 최근 시점을 선택해주세요.`);
+    const selectedComplexes=industrialComplexes.filter(c=>STATE.selected.has(c.name));
+    if(selectedComplexes.length===0)throw new Error('분석할 산업단지를 1개 이상 선택해주세요.');
+
+    btn.disabled=true;btn.textContent='데이터 수집 중...';
+
+    // 선택 산단별 최근접 측정소(전체 측정망 대상) → 중복 제거
+    const needed=new Map();
+    const coordEntries=Object.entries(stationCoordinates);
+    selectedComplexes.forEach(c=>{let bk=null,bv=null,bd=Infinity;
+      coordEntries.forEach(([k,v])=>{const d=haversine(c.lat,c.lon,v.lat,v.lon);if(d<bd){bd=d;bk=k;bv=v;}});
+      if(bk)needed.set(bk,bv);});
+
+    const keys=[...needed.keys()];
+    const dataTerm=pickDataTerm(base);
+    const baseKey=fmtHM(base)+'|'+dataTerm;
+    const failed=[];
+    const rowsByKey=new Map();
+    let done=0;const total=keys.length;setProgress(0,total);
+
+    const queue=[...keys];
+    const worker=async()=>{ while(queue.length){ const k=queue.shift();
+      const cacheKey=baseKey+'|'+k;
+      if(apiCache.has(cacheKey)){const cached=apiCache.get(cacheKey);rowsByKey.set(k,cached);if(!cached.length)failed.push(k);done++;setProgress(done,total);continue;}
+      try{
+        const json=await fetchStationRaw(apiStationName(k),dataTerm);
+        const items=extractItems(json)
+          .map(it=>({ts:normDataTime(it.dataTime),pm25:parseAir(it.pm25Value),o3:parseAir(it.o3Value)}))
+          .filter(x=>x.ts);
+        apiCache.set(cacheKey,items);rowsByKey.set(k,items);
+        if(!items.length)failed.push(k);
+      }catch(e){failed.push(k);rowsByKey.set(k,[]);}
+      done++;setProgress(done,total);
+    }};
+    await Promise.all(Array.from({length:Math.min(AIRKOREA.concurrency,total||1)},worker));
+
+    if(failed.length===total)
+      throw new Error('모든 측정소 조회에 실패했습니다.\n브라우저 보안정책(CORS)으로 API 호출이 차단되었거나, 인증키/네트워크 문제일 수 있습니다.\n업로드 모드를 이용하시거나 프록시 설정을 확인해주세요.');
+
+    // 기준시점-24h 구간 필터 → PM2.5 / O3 측정소 배열 생성
+    const winEnd=base.getTime(),winStart=winEnd-24*3600*1000;
+    const inWin=ts=>{const t=tsToMs(ts);return !isNaN(t)&&t>=winStart-60000&&t<=winEnd+60000;};
+    const pm25=[],o3=[];let allTs=[];
+    needed.forEach((coord,k)=>{
+      const rows=(rowsByKey.get(k)||[]).filter(r=>inWin(r.ts));
+      const pmTs=rows.filter(r=>r.pm25!==null).map(r=>({timestamp:r.ts,value:r.pm25}));
+      const o3Ts=rows.filter(r=>r.o3!==null).map(r=>({timestamp:r.ts,value:r.o3}));
+      if(pmTs.length)pm25.push(mkStation(k,pmTs));
+      if(o3Ts.length)o3.push(mkStation(k,o3Ts));
+      rows.forEach(r=>allTs.push(r.ts));
+    });
+    allTs.sort((a,b)=>a.localeCompare(b));
+
+    STATE.dateResult={
+      pm25,o3,failed,
+      winStart:fmtHM(new Date(winStart)),winEnd:fmtHM(new Date(winEnd)),
+      dataStart:allTs[0]||fmtHM(new Date(winStart)),dataEnd:allTs[allTs.length-1]||fmtHM(new Date(winEnd))
+    };
+
+    // 실패 측정소 안내
+    if(failed.length){const fb=$('#dateFailed');
+      fb.textContent=`조회 실패/무자료 측정소 ${failed.length}개: ${failed.map(apiStationName).join(', ')} (해당 단지는 다음으로 가까운 측정소로 매칭될 수 있습니다.)`;
+      fb.classList.remove('hidden');}
+
+    applyDateResult();
+    $('#btnAnalyze').classList.add('hidden');$('#btnReset').classList.remove('hidden');
+    $('#results').scrollIntoView({behavior:'smooth'});
+  }catch(e){errBox.textContent=e.message;errBox.classList.remove('hidden');}
+  finally{btn.disabled=false;btn.textContent=`${STATE.pollutant} 우선순위 분석 실행`;}
+}
+
+// 수집된 일자 데이터로 현재 오염물질 재분석 (재호출 없음)
+function applyDateResult(){
+  const d=STATE.dateResult;if(!d)return;
+  const errBox=$('#err');errBox.classList.add('hidden');
+  const list=STATE.pollutant==='PM2.5'?d.pm25:d.o3;
+  try{
+    if(!list.length)throw new Error(`선택 구간에서 ${STATE.pollutant} 유효 데이터가 없습니다. (다른 오염물질/시점을 시도해보세요)`);
+    STATE.result=analyzeStations(list,[...STATE.selected],STATE.pollutant);
+    // 표시 기간을 기준시점-24h ~ 기준시점 구간으로 명시
+    STATE.result.startTimestamp=d.winStart;
+    STATE.result.endTimestamp=d.winEnd;
+    renderReport();
+  }catch(e){$('#results').innerHTML='';errBox.textContent=e.message;errBox.classList.remove('hidden');}
+}
+function renderReport(){
+  const r=STATE.result,box=$('#results');const isO3=r.pollutantType==='O3';
+  const rows=r.rankedComplexes;
+  const evidenceCount=new Set(rows.map(c=>c.station.name)).size;
+  const uHdr='시급성(U)',sHdr='심각성(S)',pHdr='지속성(P)',dHdr='신뢰성(D)';
+  const rowHtml=rows.map((c,i)=>{const s=c.station.scores,m=c.station.metrics;
+    const recent=isO3?m.latest_value:m.latest_1hr_avg, high=m.full_period_max;
+    const U=isO3?s.u:(s.u1+s.u2), S=isO3?s.s:(s.s1+s.s2), P=isO3?s.p:s.p1, D=isO3?s.d:(s.d1+s.d2);
+    return `<tr data-rank="${i}" class="border-t hover:bg-blue-50 cursor-pointer">
+      <td class="px-2 sm:px-3 py-2.5 sm:py-3 text-center">${i+1}</td>
+      <td class="px-2 sm:px-3 py-2.5 sm:py-3 font-semibold whitespace-nowrap">${esc(c.complex.name)}</td>
+      <td class="px-2 sm:px-3 py-2.5 sm:py-3 whitespace-nowrap text-gray-600">${esc(c.station.name)} <span class="text-gray-400">(${c.distanceKm.toFixed(1)}km)</span></td>
+      <td class="px-2 sm:px-3 py-2.5 sm:py-3 text-right tabular-nums">${fmtV(recent)}</td>
+      <td class="px-2 sm:px-3 py-2.5 sm:py-3 text-right tabular-nums">${fmtV(high)}</td>
+      <td class="px-2 sm:px-3 py-2.5 sm:py-3 text-right font-bold text-brand-blue tabular-nums">${s.total.toFixed(1)}</td>
+      <td class="px-2 sm:px-3 py-2.5 sm:py-3 text-right tabular-nums">${U.toFixed(1)}</td>
+      <td class="px-2 sm:px-3 py-2.5 sm:py-3 text-right tabular-nums">${S.toFixed(1)}</td>
+      <td class="px-2 sm:px-3 py-2.5 sm:py-3 text-right tabular-nums">${P.toFixed(1)}</td>
+      <td class="px-2 sm:px-3 py-2.5 sm:py-3 text-right tabular-nums text-green-700">${D.toFixed(1)}</td>
+    </tr>`;}).join('');
+
+  box.innerHTML=`
+  <div class="space-y-6 fade-in">
+    <h2 class="text-xl sm:text-2xl font-bold text-brand-blue break-keep">[${r.pollutantType}] ${esc(CONFIG.appName)}</h2>
+    <div class="bg-blue-50 border border-blue-100 rounded-lg p-4 sm:p-5">
+      <div class="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-3 mb-2">
+        <h3 class="font-bold">분석 요약</h3>
+        <button id="btnFullReport" class="w-full sm:w-auto shrink-0 px-4 py-2 rounded-md bg-brand-blue text-white text-sm font-bold shadow hover:bg-brand-lightblue">상세 분석 보고서 보기</button>
+      </div>
+      <p class="text-sm mb-1"><b>데이터 분석 기간:</b> ${esc(r.startTimestamp)} ~ ${esc(r.endTimestamp)}</p>
+      <p class="text-sm text-gray-700">선택된 산업단지 인근의 데이터를 시급성(U)·심각성(S)·지속성(P)·신뢰성(D) 기준으로 종합 분석하여, 아래와 같이 총점 기반의 우선관리 산업단지 순위를 도출하였습니다.</p>
+      <p class="text-sm mt-2">분석 대상 산업단지 <b>${r.totalComplexesAnalyzed}</b>개 · 근거 측정소 <b>${evidenceCount}</b>개
+        <span class="text-gray-400 text-xs">(각 산단에서 가장 가까운 측정소 1곳 기준${r.totalStationsParsed>evidenceCount?` · 조회·파싱된 측정소 ${r.totalStationsParsed}개 중`:''})</span></p>
+    </div>
+
+    <details class="bg-white border rounded-lg p-4">
+      <summary class="font-semibold cursor-pointer">평가 기준 안내 (${r.pollutantType})</summary>
+      <div class="mt-3 text-sm text-gray-600">${criteriaHtml(isO3)}</div>
+    </details>
+
+    <div>
+      <h3 class="text-lg sm:text-xl font-bold mb-1">[우선관리 산업단지 순위]</h3>
+      <div class="flex flex-col sm:flex-row sm:justify-between gap-1 mb-2">
+        <p class="text-xs text-gray-400 sm:hidden">← 표를 좌우로 밀어서 전체 항목을 볼 수 있습니다 →</p>
+        <p class="text-xs text-gray-400 sm:ml-auto">* 항목을 클릭하면 지도와 상세 정보를 확인할 수 있습니다.</p>
+      </div>
+      <div class="overflow-x-auto border rounded-lg -mx-4 sm:mx-0 px-4 sm:px-0">
+        <table class="min-w-full text-xs sm:text-sm whitespace-nowrap">
+          <thead class="bg-gray-50 text-gray-600">
+            <tr>
+              <th class="px-2 sm:px-3 py-2">순위</th><th class="px-2 sm:px-3 py-2 text-left">산업단지</th>
+              <th class="px-2 sm:px-3 py-2 text-left">근거 측정소 (거리)</th>
+              <th class="px-2 sm:px-3 py-2 text-right">최근농도 (${unit()})</th>
+              <th class="px-2 sm:px-3 py-2 text-right">최고농도 (${unit()})</th>
+              <th class="px-2 sm:px-3 py-2 text-right">총점</th>
+              <th class="px-2 sm:px-3 py-2 text-right">${uHdr}</th><th class="px-2 sm:px-3 py-2 text-right">${sHdr}</th>
+              <th class="px-2 sm:px-3 py-2 text-right">${pHdr}</th><th class="px-2 sm:px-3 py-2 text-right">${dHdr}</th>
+            </tr>
+          </thead>
+          <tbody>${rowHtml}</tbody>
+        </table>
+      </div>
+    </div>
+
+    <div>
+      <h3 class="text-lg sm:text-xl font-bold mb-3">상세 분석 (상위 ${Math.min(10,rows.length)}개)</h3>
+      <div id="detailCards" class="space-y-5"></div>
+    </div>
+  </div>`;
+
+  // 상세 카드 (상위 10)
+  const dc=$('#detailCards',box);
+  rows.slice(0,10).forEach((c,i)=>dc.appendChild(detailCard(c,i,isO3)));
+  // 행 클릭 → 해당 상세로 스크롤
+  $$('#results tbody tr').forEach(tr=>tr.addEventListener('click',()=>{const rk=+tr.dataset.rank;const t=$('#detail-'+rk);if(t)t.scrollIntoView({behavior:'smooth',block:'center'});}));
+  // 지도 초기화
+  setTimeout(()=>rows.slice(0,10).forEach((c,i)=>initMap('map-'+i,c)),60);
+  // 상세 분석 보고서 팝업
+  const bFR=$('#btnFullReport',box); if(bFR) bFR.addEventListener('click',openReportModal);
+}
+
+function detailCard(c,i,isO3,prefix=''){
+  const s=c.station.scores,m=c.station.metrics,comp=s.components||{};
+  const card=el('div','bg-white border rounded-lg p-4 sm:p-5 shadow-sm');card.id=prefix+'detail-'+i;
+  const conc=isO3
+    ? `<div class="grid grid-cols-1 sm:grid-cols-3 gap-1.5 sm:gap-2 text-sm bg-gray-50 rounded-md p-3">
+         <div>최신 농도: <b>${fmtV(m.latest_value)} ppm</b></div>
+         <div>최고 농도: <b>${fmtV(m.full_period_max)} ppm</b></div>
+         <div>초과 시간: <b>${m.ozone_exceed_hours??0}시간</b></div></div>`
+    : `<div class="grid grid-cols-1 sm:grid-cols-3 gap-1.5 sm:gap-2 text-sm bg-gray-50 rounded-md p-3">
+         <div>최신 1시간: <b>${fmtV(m.latest_1hr_avg)} ㎍/㎥</b></div>
+         <div>최고 농도: <b>${fmtV(m.full_period_max)} ㎍/㎥</b></div>
+         <div>기간 평균: <b>${fmtV(m.full_period_avg)} ㎍/㎥</b></div></div>`;
+  const breakdown=isO3
+    ? [['U1 (최신)',comp.U1_val],['U2 (평균)',comp.U2_val],['S (심각성)',comp.S_val],['P (지속성)',comp.P_val],['D (신뢰성)',comp.D_val]]
+    : [['U1 (최신 1시간)',`${s.u1}점 (${comp['최신 1시간 농도']||''})`],
+       ['U2 (2시간 변화)',`${s.u2}점 (${comp['2시간 농도 변화']||''})`],
+       ['S1 (기간 최대)',`${s.s1}점 (${comp['기간 최대 농도']||''})`],
+       ['S2 (최대 최근성)',`${s.s2}점 (${comp['최대농도 최근성']||''})`],
+       ['P1 (기간 평균)',`${s.p1}점 (${comp['기간 평균 농도']||''})`],
+       ['D1 (품질)',`${s.d1}점`],['D2 (근접성)',comp['근접성 점수']||`${s.d2}점`]];
+  const bdHtml=breakdown.map(([k,v])=>`<div class="flex justify-between border-b border-gray-100 py-1"><span class="text-gray-500">${k}</span><span class="font-medium text-right">${esc(v||'-')}</span></div>`).join('');
+  card.innerHTML=`
+    <h4 class="text-lg font-bold border-b pb-2 mb-3">${i+1}. ${esc(c.complex.name)}</h4>
+    <p class="text-sm text-gray-600 mb-3">순위: ${i+1}위 &nbsp;|&nbsp; 총점: <b class="text-brand-blue">${s.total.toFixed(1)}점</b> &nbsp;|&nbsp; 근거 측정소: ${esc(c.station.name)} (${c.distanceKm.toFixed(1)}km)</p>
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+      <div class="space-y-3">
+        <div><p class="font-semibold text-sm mb-1">주요 농도 지표</p>${conc}</div>
+        <div><p class="font-semibold text-sm mb-1">세부 점수 내역 (${isO3?'오존':'미세먼지'})</p><div class="text-sm">${bdHtml}</div></div>
+      </div>
+      <div>
+        <p class="font-semibold text-sm mb-1">위치 확인</p>
+        <div id="${prefix}map-${i}" style="height:260px" class="border"></div>
+        <div class="mt-2 text-xs text-gray-600 space-y-1">
+          <div><span class="inline-block w-3 h-3 rounded-full align-middle" style="background:#D32F2F"></span> ${esc(c.complex.name)} — ${esc(c.complex.address||'')}</div>
+          <div><span class="inline-block w-3 h-3 rounded-full align-middle" style="background:#1976D2"></span> ${esc(c.station.name)} 측정소 — ${esc(c.stationCoord?.address||'')}</div>
+        </div>
+      </div>
+    </div>`;
+  return card;
+}
+
+function initMap(id,c){
+  const cont=document.getElementById(id);if(!cont||!window.L||!c.stationCoord)return;
+  try{
+    const a=[c.complex.lat,c.complex.lon],b=[c.stationCoord.lat,c.stationCoord.lon];
+    const map=L.map(id,{scrollWheelZoom:false});
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(map);
+    L.circleMarker(a,{radius:9,color:'#B71C1C',fillColor:'#D32F2F',fillOpacity:.9,weight:2}).addTo(map).bindPopup(esc(c.complex.name));
+    L.circleMarker(b,{radius:9,color:'#0D47A1',fillColor:'#1976D2',fillOpacity:.9,weight:2}).addTo(map).bindPopup(esc(c.station.name)+' 측정소');
+    L.polyline([a,b],{color:'#7C4DFF',weight:2,dashArray:'6 6'}).addTo(map);
+    map.fitBounds([a,b],{padding:[40,40],maxZoom:14});
+    setTimeout(()=>{try{map.invalidateSize();map.fitBounds([a,b],{padding:[40,40],maxZoom:14});}catch(_){}} ,150);
+  }catch(e){cont.innerHTML='<p class="text-xs text-gray-400 p-2">지도를 불러올 수 없습니다.</p>';}
+}
+
+/* ---------- 평가 기준 텍스트 ---------- */
+function criteriaHtml(isO3){
+  if(isO3){const o=ozoneCriteria;
+    return `<ul class="list-disc pl-5 space-y-1">
+      <li><b>U1 시급성</b>: ${esc(o.U1.description)}</li>
+      <li><b>U2 시급성</b>: ${esc(o.U2.description)}</li>
+      <li><b>S 심각성</b>: ${esc(o.S.description)}</li>
+      <li><b>P 지속성</b>: ${esc(o.P.description)}</li>
+      <li><b>D 신뢰성</b>: ${esc(o.D.description)}</li>
+    </ul>`;}
+  const c=scoringCriteria;
+  return `<ul class="list-disc pl-5 space-y-1">
+    <li><b>U1 시급성</b>: 최신 1시간 농도 × 0.5 (최대 ${c.U1.max_score}점)</li>
+    <li><b>U2 시급성</b>: 2시간 농도 변화 기반 (최대 ${c.U2.max_score}점)</li>
+    <li><b>S1 심각성</b>: 기간 최대 농도 × 0.2 (최대 ${c.S1.max_score}점)</li>
+    <li><b>S2 심각성</b>: 최대농도 발생 최근성 (최대 ${c.S2.max_score}점)</li>
+    <li><b>P1 지속성</b>: 기간 평균 농도 기반 (최대 ${c.P1.max_score}점)</li>
+    <li><b>D1 신뢰성</b>: 이상값(≥${c.D1.anomaly_threshold}) ${c.D1.penalty_anomaly}점 / 장기 동일값(연속 ${c.D1.constant_run_threshold}시간↑) ${c.D1.penalty_constant}점</li>
+    <li><b>D2 신뢰성</b>: 측정소 근접성 (최대 ${c.D2.max_score}점, ${c.D2.max_distance_km}km 기준)</li>
+  </ul>`;
+}
+
+/* ---------- 모달 ---------- */
+function modalShell(title,inner){
+  const root=$('#modalRoot');
+  root.innerHTML=`<div class="fixed inset-0 bg-black bg-opacity-60 z-50 flex justify-center items-center p-2 sm:p-4 fade-in">
+    <div class="bg-white rounded-lg shadow-2xl w-full max-w-4xl p-4 sm:p-6 relative max-h-[92vh] overflow-y-auto">
+      <button id="mClose" class="absolute top-3 right-3 sm:top-4 sm:right-4 text-gray-500 hover:text-gray-800 text-3xl leading-none">&times;</button>
+      <h3 class="text-lg sm:text-xl font-bold mb-4 flex items-center gap-2 pr-8">${title}</h3>
+      ${inner}
+      <div class="mt-6 flex justify-end"><button id="mClose2" class="w-full sm:w-auto px-6 py-2.5 bg-gray-200 rounded-md hover:bg-gray-300 font-medium">닫기</button></div>
+    </div></div>`;
+  const close=()=>root.innerHTML='';
+  $('#mClose',root).addEventListener('click',close);$('#mClose2',root).addEventListener('click',close);
+  root.firstElementChild.addEventListener('click',e=>{if(e.target===root.firstElementChild)close();});
+}
+function openCriteriaModal(){modalShell(`📋 ${STATE.pollutant} 우선관리 대상 선정 평가 기준`,`<div class="text-sm text-gray-700">${criteriaHtml(STATE.pollutant==='O3')}</div>`);}
+function openInfoModal(){
+  const complexes=industrialComplexes.map(c=>`
+    <div class="border rounded-lg p-3 text-sm">
+      <p class="font-bold">${esc(c.name)}</p>
+      <p class="text-gray-500 text-xs mt-1">주소: ${esc(c.address||'-')}</p>
+      <p class="text-gray-500 text-xs">위도: ${c.lat} / 경도: ${c.lon}</p>
+    </div>`).join('');
+  const stations=Object.entries(stationCoordinates).map(([k,v])=>`
+    <div class="border rounded-lg p-3 text-sm">
+      <p class="font-bold">${esc(k)}</p>
+      <p class="text-gray-500 text-xs mt-1">${esc(v.address||'')}</p>
+      <p class="text-gray-500 text-xs">위도: ${v.lat} / 경도: ${v.lon}</p>
+    </div>`).join('');
+  modalShell('📍 위치 정보 안내',`
+    <div class="flex gap-1 sm:gap-2 border-b mb-4">
+      <button id="tabC" class="tabBtn flex-1 sm:flex-none px-2 sm:px-4 py-2 text-xs sm:text-base font-medium border-b-2 border-brand-blue text-brand-blue whitespace-nowrap">🏭 산업단지 (${industrialComplexes.length})</button>
+      <button id="tabS" class="tabBtn flex-1 sm:flex-none px-2 sm:px-4 py-2 text-xs sm:text-base font-medium border-b-2 border-transparent text-gray-500 whitespace-nowrap">📡 대기 측정망 (${Object.keys(stationCoordinates).length})</button>
+    </div>
+    <div id="paneC" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">${complexes}</div>
+    <div id="paneS" class="hidden grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">${stations}</div>`);
+  const root=$('#modalRoot');
+  const setTab=which=>{
+    $('#paneC',root).classList.toggle('hidden',which!=='C');$('#paneS',root).classList.toggle('hidden',which!=='S');
+    $('#tabC',root).className='tabBtn flex-1 sm:flex-none px-2 sm:px-4 py-2 text-xs sm:text-base font-medium border-b-2 whitespace-nowrap '+(which==='C'?'border-brand-blue text-brand-blue':'border-transparent text-gray-500');
+    $('#tabS',root).className='tabBtn flex-1 sm:flex-none px-2 sm:px-4 py-2 text-xs sm:text-base font-medium border-b-2 whitespace-nowrap '+(which==='S'?'border-brand-blue text-brand-blue':'border-transparent text-gray-500');};
+  $('#tabC',root).addEventListener('click',()=>setTab('C'));$('#tabS',root).addEventListener('click',()=>setTab('S'));
+}
+
+/* ---------- 상세 분석 보고서 팝업 ---------- */
+function openReportModal(){
+  const r=STATE.result;if(!r)return;const isO3=r.pollutantType==='O3';const rows=r.rankedComplexes;
+  const top5=rows.slice(0,5).map((c,i)=>{const s=c.station.scores,m=c.station.metrics;
+    const recent=isO3?m.latest_value:m.latest_1hr_avg,high=m.full_period_max;
+    const U=isO3?s.u:(s.u1+s.u2),S=isO3?s.s:(s.s1+s.s2),P=isO3?s.p:s.p1,D=isO3?s.d:(s.d1+s.d2);
+    return `<tr class="border-t">
+      <td class="px-2 sm:px-3 py-2.5 sm:py-3 text-center">${i+1}</td>
+      <td class="px-2 sm:px-3 py-2.5 sm:py-3 font-semibold whitespace-nowrap">${esc(c.complex.name)}</td>
+      <td class="px-2 sm:px-3 py-2.5 sm:py-3 whitespace-nowrap text-gray-600">${esc(c.station.name)}</td>
+      <td class="px-2 sm:px-3 py-2.5 sm:py-3 text-right tabular-nums">${fmtV(recent)}</td>
+      <td class="px-2 sm:px-3 py-2.5 sm:py-3 text-right tabular-nums">${fmtV(high)}</td>
+      <td class="px-2 sm:px-3 py-2.5 sm:py-3 text-right font-bold text-brand-blue tabular-nums">${s.total.toFixed(1)}</td>
+      <td class="px-2 sm:px-3 py-2.5 sm:py-3 text-right tabular-nums">${U.toFixed(1)}</td>
+      <td class="px-2 sm:px-3 py-2.5 sm:py-3 text-right tabular-nums">${S.toFixed(1)}</td>
+      <td class="px-2 sm:px-3 py-2.5 sm:py-3 text-right tabular-nums">${P.toFixed(1)}</td>
+      <td class="px-2 sm:px-3 py-2.5 sm:py-3 text-right tabular-nums text-green-700">${D.toFixed(1)}</td>
+    </tr>`;}).join('');
+  const root=$('#modalRoot');
+  root.innerHTML=`<div class="fixed inset-0 bg-black bg-opacity-60 z-50 flex justify-center items-start p-2 sm:p-4 overflow-y-auto fade-in">
+    <div class="bg-white rounded-lg shadow-2xl w-full max-w-6xl my-3 sm:my-6 p-4 sm:p-6 relative">
+      <button id="rClose" class="absolute top-3 right-3 sm:top-4 sm:right-4 text-gray-500 hover:text-gray-800 text-3xl leading-none">&times;</button>
+      <h3 class="text-xl sm:text-2xl font-bold text-brand-blue pr-8">분석 보고서 (${r.pollutantType})</h3>
+      <p class="text-sm text-gray-500 mb-5">분석 기간: ${esc(r.startTimestamp)} ~ ${esc(r.endTimestamp)}</p>
+      <h4 class="text-base sm:text-lg font-bold mb-2">종합 순위 (상위 ${Math.min(5,rows.length)}개)</h4>
+      <p class="text-xs text-gray-400 mb-1 sm:hidden">← 좌우로 밀어서 보기 →</p>
+      <div class="overflow-x-auto border rounded-lg mb-8">
+        <table class="min-w-full text-xs sm:text-sm whitespace-nowrap">
+          <thead class="bg-gray-50 text-gray-600"><tr>
+            <th class="px-2 sm:px-3 py-2">순위</th><th class="px-2 sm:px-3 py-2 text-left">산업단지명</th>
+            <th class="px-2 sm:px-3 py-2 text-left">근거 측정소</th>
+            <th class="px-2 sm:px-3 py-2 text-right">최근농도</th><th class="px-2 sm:px-3 py-2 text-right">최고농도</th>
+            <th class="px-2 sm:px-3 py-2 text-right">총점</th>
+            <th class="px-2 sm:px-3 py-2 text-right">시급성(U)</th><th class="px-2 sm:px-3 py-2 text-right">심각성(S)</th>
+            <th class="px-2 sm:px-3 py-2 text-right">지속성(P)</th><th class="px-2 sm:px-3 py-2 text-right">신뢰성(D)</th>
+          </tr></thead><tbody>${top5}</tbody>
+        </table>
+      </div>
+      <h4 class="text-base sm:text-lg font-bold mb-3">상세 분석 (상위 ${Math.min(10,rows.length)}개)</h4>
+      <div id="rDetailCards" class="space-y-5"></div>
+      <div class="mt-6 flex justify-end"><button id="rClose2" class="w-full sm:w-auto px-6 py-2.5 bg-gray-200 rounded-md hover:bg-gray-300 font-medium">닫기</button></div>
+    </div></div>`;
+  const dc=$('#rDetailCards',root);
+  rows.slice(0,10).forEach((c,i)=>dc.appendChild(detailCard(c,i,isO3,'r')));
+  const close=()=>root.innerHTML='';
+  $('#rClose',root).addEventListener('click',close);$('#rClose2',root).addEventListener('click',close);
+  root.firstElementChild.addEventListener('click',e=>{if(e.target===root.firstElementChild)close();});
+  setTimeout(()=>rows.slice(0,10).forEach((c,i)=>initMap('rmap-'+i,c)),90);
+}
+
+render();
+
+</script>
+</body>
+</html>
